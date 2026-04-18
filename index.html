@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>太陽能板配置工具</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', 'Microsoft JhengHei', sans-serif; background: #f4f5f7; color: #222; min-height: 100vh; }
+  header { background: #0d1f2d; color: #fff; padding: 18px 32px; display: flex; align-items: center; gap: 14px; }
+  header svg { width: 28px; height: 28px; }
+  header h1 { font-size: 18px; font-weight: 600; letter-spacing: 0.02em; }
+  header span { font-size: 12px; color: #7ab8d8; margin-left: 8px; }
+  .main { max-width: 900px; margin: 0 auto; padding: 24px 16px 48px; }
+  .card { background: #fff; border-radius: 12px; border: 1px solid #e2e4e8; padding: 20px 24px; margin-bottom: 16px; }
+  .card-title { font-size: 12px; font-weight: 600; color: #888; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 16px; }
+  .row { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 12px; }
+  .row:last-child { margin-bottom: 0; }
+  .field label { display: block; font-size: 12px; color: #666; margin-bottom: 4px; }
+  .field input { width: 100%; padding: 8px 10px; border: 1px solid #d0d4da; border-radius: 7px; font-size: 14px; color: #222; background: #fafbfc; transition: border 0.15s; font-family: inherit; }
+  .field input:focus { outline: none; border-color: #378ADD; background: #fff; }
+  .orient-btns { display: flex; gap: 8px; }
+  .orient-btn { flex: 1; border: 1px solid #d0d4da; border-radius: 7px; padding: 7px; text-align: center; font-size: 12px; cursor: pointer; color: #666; background: #fafbfc; font-family: inherit; transition: all 0.15s; }
+  .orient-btn:hover { border-color: #378ADD; color: #185FA5; }
+  .orient-btn.sel { border-color: #378ADD; background: #e6f1fb; color: #185FA5; font-weight: 600; }
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 16px; }
+  .stat { background: #f4f5f7; border-radius: 9px; padding: 12px 14px; }
+  .stat .lbl { font-size: 11px; color: #888; margin-bottom: 3px; }
+  .stat .val { font-size: 22px; font-weight: 700; color: #0d1f2d; line-height: 1; }
+  .stat .unt { font-size: 11px; color: #aaa; margin-top: 2px; }
+  .canvas-wrap { background: #e8e9ec; border-radius: 10px; min-height: 300px; display: flex; align-items: center; justify-content: center; overflow: auto; padding: 8px; }
+  .empty-hint { color: #aaa; font-size: 13px; }
+  .legend { display: flex; gap: 18px; font-size: 12px; color: #666; margin-bottom: 10px; flex-wrap: wrap; }
+  .legend-item { display: flex; align-items: center; gap: 5px; }
+  .legend-box { width: 16px; height: 11px; border-radius: 2px; }
+  .btn-row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 4px; }
+  .btn-generate { background: #0d1f2d; color: #fff; border: none; border-radius: 8px; padding: 10px 24px; font-size: 14px; font-weight: 600; cursor: pointer; font-family: inherit; transition: background 0.15s; }
+  .btn-generate:hover { background: #1a3a52; }
+  .btn-dl { border: 1px solid #d0d4da; background: #fff; color: #333; border-radius: 8px; padding: 10px 18px; font-size: 13px; cursor: pointer; font-family: inherit; transition: all 0.15s; }
+  .btn-dl:hover { border-color: #378ADD; color: #185FA5; background: #f0f7ff; }
+  .note { font-size: 12px; color: #999; margin-top: 10px; }
+  @media (max-width: 600px) {
+    .stats { grid-template-columns: repeat(2, 1fr); }
+    header h1 { font-size: 15px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <svg viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <rect x="2" y="8" width="24" height="14" rx="2" fill="#378ADD" opacity="0.3"/>
+    <rect x="2" y="8" width="24" height="14" rx="2" stroke="#7ab8d8" stroke-width="1.2"/>
+    <line x1="2" y1="15" x2="26" y2="15" stroke="#7ab8d8" stroke-width="0.8"/>
+    <line x1="8" y1="8" x2="8" y2="22" stroke="#7ab8d8" stroke-width="0.8"/>
+    <line x1="14" y1="8" x2="14" y2="22" stroke="#7ab8d8" stroke-width="0.8"/>
+    <line x1="20" y1="8" x2="20" y2="22" stroke="#7ab8d8" stroke-width="0.8"/>
+    <line x1="14" y1="2" x2="14" y2="6" stroke="#FFD700" stroke-width="1.5" stroke-linecap="round"/>
+    <line x1="20" y1="4" x2="18" y2="7" stroke="#FFD700" stroke-width="1.5" stroke-linecap="round"/>
+    <line x1="8" y1="4" x2="10" y2="7" stroke="#FFD700" stroke-width="1.5" stroke-linecap="round"/>
+  </svg>
+  <h1>太陽能板配置工具 <span>Solar Panel Layout</span></h1>
+</header>
+
+<div class="main">
+
+  <div class="card">
+    <div class="card-title">太陽能板規格</div>
+    <div class="row">
+      <div class="field"><label>品牌</label><input type="text" id="brand" value="Jinko Solar" placeholder="例：Jinko Solar"></div>
+      <div class="field"><label>型號</label><input type="text" id="model" value="Tiger Neo N-type" placeholder="例：Tiger Neo"></div>
+      <div class="field"><label>瓦數 (W)</label><input type="number" id="watt" value="580" min="1"></div>
+    </div>
+    <div class="row">
+      <div class="field"><label>長度 (mm)</label><input type="number" id="plen" value="2278" min="1"></div>
+      <div class="field"><label>寬度 (mm)</label><input type="number" id="pwid" value="1134" min="1"></div>
+      <div class="field"><label>板間距 (mm)</label><input type="number" id="gap" value="20" min="0"></div>
+    </div>
+    <div class="row">
+      <div class="field">
+        <label>排列方向</label>
+        <div class="orient-btns">
+          <button class="orient-btn sel" id="btn-v" onclick="setOrient('v')">直式 ↕</button>
+          <button class="orient-btn" id="btn-h" onclick="setOrient('h')">橫式 ↔</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">鋪排區域</div>
+    <div class="row">
+      <div class="field"><label>區域寬度 (mm)</label><input type="number" id="awidth" value="8000" min="1"></div>
+      <div class="field"><label>區域長度 (mm)</label><input type="number" id="alength" value="6000" min="1"></div>
+      <div class="field"><label>邊距 (mm)</label><input type="number" id="margin" value="100" min="0"></div>
+    </div>
+    <div class="note">超出區域 1000mm 以內的太陽能板也會納入配置，並標示超出距離。</div>
+  </div>
+
+  <div class="stats">
+    <div class="stat"><div class="lbl">配置片數</div><div class="val" id="s-count">—</div><div class="unt">片</div></div>
+    <div class="stat"><div class="lbl">總瓦數</div><div class="val" id="s-watt">—</div><div class="unt">kW</div></div>
+    <div class="stat"><div class="lbl">區域內</div><div class="val" id="s-inside">—</div><div class="unt">片</div></div>
+    <div class="stat"><div class="lbl">超出區域</div><div class="val" id="s-outside">—</div><div class="unt">片</div></div>
+  </div>
+
+  <div class="card" style="padding: 16px;">
+    <div class="legend">
+      <div class="legend-item"><div class="legend-box" style="background:#121e2a; border:1.5px solid #8aa8be;"></div> 區域內</div>
+      <div class="legend-item"><div class="legend-box" style="background:#1e3020; border:1.5px solid #7aaa62;"></div> 超出區域（≤1m）</div>
+    </div>
+    <div class="canvas-wrap" id="canvasArea">
+      <p class="empty-hint">點擊「生成配置圖」開始</p>
+    </div>
+  </div>
+
+  <div class="btn-row">
+    <button class="btn-generate" onclick="generate()">生成配置圖</button>
+    <button class="btn-dl" onclick="downloadPNG()">下載 PNG</button>
+    <button class="btn-dl" onclick="downloadSVG()">下載 SVG</button>
+  </div>
+
+</div>
+
+<script>
+let orient = 'v';
+let lastSVGContent = '';
+
+function setOrient(o) {
+  orient = o;
+  document.getElementById('btn-v').className = 'orient-btn' + (o==='v'?' sel':'');
+  document.getElementById('btn-h').className = 'orient-btn' + (o==='h'?' sel':'');
+}
+
+function getVals() {
+  const plen  = parseFloat(document.getElementById('plen').value)||2278;
+  const pwid  = parseFloat(document.getElementById('pwid').value)||1134;
+  const gap   = parseFloat(document.getElementById('gap').value)||20;
+  const aw    = parseFloat(document.getElementById('awidth').value)||8000;
+  const al    = parseFloat(document.getElementById('alength').value)||6000;
+  const mg    = parseFloat(document.getElementById('margin').value)||100;
+  const watt  = parseFloat(document.getElementById('watt').value)||580;
+  const brand = document.getElementById('brand').value||'';
+  const model = document.getElementById('model').value||'';
+  const pH = orient==='v' ? plen : pwid;
+  const pW = orient==='v' ? pwid : plen;
+  return { plen, pwid, gap, aw, al, mg, watt, brand, model, pH, pW };
+}
+
+function isInside(px, py, pW, pH, aw, al, mg) {
+  return px >= mg && py >= mg && (px+pW) <= (aw-mg) && (py+pH) <= (al-mg);
+}
+
+function drawPanel(svg, rx, ry, rw, rh, isOver) {
+  const ns = 'http://www.w3.org/2000/svg';
+  const g = document.createElementNS(ns,'g');
+  const body = document.createElementNS(ns,'rect');
+  body.setAttribute('x', rx); body.setAttribute('y', ry);
+  body.setAttribute('width', rw); body.setAttribute('height', rh);
+  body.setAttribute('fill', isOver ? '#1e3020' : '#121e2a');
+  body.setAttribute('rx','1');
+  g.appendChild(body);
+  const rows = 6, cols = 4;
+  for(let i=1; i<rows; i++) {
+    const ly = ry + (rh/rows)*i;
+    const line = document.createElementNS(ns,'line');
+    line.setAttribute('x1', rx+1); line.setAttribute('x2', rx+rw-1);
+    line.setAttribute('y1', ly); line.setAttribute('y2', ly);
+    line.setAttribute('stroke', isOver ? '#3a5a3a' : '#1e3545');
+    line.setAttribute('stroke-width','0.4');
+    g.appendChild(line);
+  }
+  for(let i=1; i<cols; i++) {
+    const lx = rx + (rw/cols)*i;
+    const line = document.createElementNS(ns,'line');
+    line.setAttribute('x1', lx); line.setAttribute('x2', lx);
+    line.setAttribute('y1', ry+1); line.setAttribute('y2', ry+rh-1);
+    line.setAttribute('stroke', isOver ? '#3a5a3a' : '#1e3545');
+    line.setAttribute('stroke-width','0.4');
+    g.appendChild(line);
+  }
+  const frame = document.createElementNS(ns,'rect');
+  frame.setAttribute('x', rx); frame.setAttribute('y', ry);
+  frame.setAttribute('width', rw); frame.setAttribute('height', rh);
+  frame.setAttribute('fill','none');
+  frame.setAttribute('stroke', isOver ? '#7aaa62' : '#8aa8be');
+  frame.setAttribute('stroke-width','1.2');
+  frame.setAttribute('rx','1');
+  g.appendChild(frame);
+  svg.appendChild(g);
+}
+
+function generate() {
+  const v = getVals();
+  const OVER = 1000;
+  let panels = [];
+  let x = v.mg;
+  while(x + v.pW <= v.aw + OVER) {
+    let y = v.mg;
+    while(y + v.pH <= v.al + OVER) {
+      const inside = isInside(x, y, v.pW, v.pH, v.aw, v.al, v.mg);
+      const overX = Math.max(0, (x + v.pW) - v.aw);
+      const overY = Math.max(0, (y + v.pH) - v.al);
+      panels.push({ x, y, inside, overX, overY });
+      y += v.pH + v.gap;
+    }
+    x += v.pW + v.gap;
+  }
+
+  const count = panels.length;
+  const insideCount = panels.filter(p=>p.inside).length;
+  const outsideCount = count - insideCount;
+  const totalKw = (count * v.watt / 1000).toFixed(2);
+
+  document.getElementById('s-count').textContent = count;
+  document.getElementById('s-watt').textContent = totalKw;
+  document.getElementById('s-inside').textContent = insideCount;
+  document.getElementById('s-outside').textContent = outsideCount;
+
+  const ns = 'http://www.w3.org/2000/svg';
+  const pad = 52;
+  const canW = 820;
+  const totalW = v.aw + OVER;
+  const totalH = v.al + OVER;
+  const scale = (canW - pad*2) / totalW;
+  const canH = Math.round(totalH * scale) + pad*2 + 30;
+
+  const area = document.getElementById('canvasArea');
+  area.innerHTML = '';
+
+  const svg = document.createElementNS(ns,'svg');
+  svg.setAttribute('width', canW);
+  svg.setAttribute('height', canH);
+  svg.setAttribute('viewBox', `0 0 ${canW} ${canH}`);
+  svg.setAttribute('xmlns', ns);
+  svg.style.display = 'block';
+
+  const bgOver = document.createElementNS(ns,'rect');
+  bgOver.setAttribute('x', pad); bgOver.setAttribute('y', pad);
+  bgOver.setAttribute('width', totalW*scale); bgOver.setAttribute('height', totalH*scale);
+  bgOver.setAttribute('fill','#e8f0e0');
+  bgOver.setAttribute('stroke','#7aaa62'); bgOver.setAttribute('stroke-width','0.8');
+  bgOver.setAttribute('stroke-dasharray','5,3');
+  svg.appendChild(bgOver);
+
+  const bgMain = document.createElementNS(ns,'rect');
+  bgMain.setAttribute('x', pad); bgMain.setAttribute('y', pad);
+  bgMain.setAttribute('width', v.aw*scale); bgMain.setAttribute('height', v.al*scale);
+  bgMain.setAttribute('fill','#e8e6e0');
+  bgMain.setAttribute('stroke','#444'); bgMain.setAttribute('stroke-width','1.5');
+  svg.appendChild(bgMain);
+
+  panels.forEach(p => {
+    const rx = pad + p.x * scale;
+    const ry = pad + p.y * scale;
+    const rw = v.pW * scale;
+    const rh = v.pH * scale;
+    drawPanel(svg, rx, ry, rw, rh, !p.inside);
+    if(!p.inside) {
+      const overXm = (p.overX/1000).toFixed(2);
+      const overYm = (p.overY/1000).toFixed(2);
+      let label = '';
+      if(p.overX > 0 && p.overY > 0) label = `+${overXm}m, +${overYm}m`;
+      else if(p.overX > 0) label = `+${overXm}m →`;
+      else if(p.overY > 0) label = `+${overYm}m ↓`;
+      if(label && rw > 20 && rh > 14) {
+        const t = document.createElementNS(ns,'text');
+        t.setAttribute('x', rx + rw/2);
+        t.setAttribute('y', ry + rh/2 + 4);
+        t.setAttribute('text-anchor','middle');
+        t.setAttribute('font-size', Math.max(7, Math.min(10, rh*0.18)));
+        t.setAttribute('fill','#a0d080');
+        t.setAttribute('font-family','sans-serif');
+        t.setAttribute('font-weight','500');
+        t.textContent = label;
+        svg.appendChild(t);
+      }
+    }
+  });
+
+  const addDimH = (x1, x2, y, label) => {
+    const line = document.createElementNS(ns,'line');
+    line.setAttribute('x1',x1); line.setAttribute('x2',x2);
+    line.setAttribute('y1',y); line.setAttribute('y2',y);
+    line.setAttribute('stroke','#777'); line.setAttribute('stroke-width','0.7');
+    svg.appendChild(line);
+    [[x1,y],[x2,y]].forEach(([ex,ey]) => {
+      const tick = document.createElementNS(ns,'line');
+      tick.setAttribute('x1',ex); tick.setAttribute('x2',ex);
+      tick.setAttribute('y1',ey-4); tick.setAttribute('y2',ey+4);
+      tick.setAttribute('stroke','#777'); tick.setAttribute('stroke-width','0.7');
+      svg.appendChild(tick);
+    });
+    const t = document.createElementNS(ns,'text');
+    t.setAttribute('x',(x1+x2)/2); t.setAttribute('y',y-6);
+    t.setAttribute('text-anchor','middle'); t.setAttribute('font-size','11');
+    t.setAttribute('fill','#444'); t.setAttribute('font-family','sans-serif');
+    t.textContent = label;
+    svg.appendChild(t);
+  };
+
+  const addDimV = (y1, y2, x, label) => {
+    const line = document.createElementNS(ns,'line');
+    line.setAttribute('x1',x); line.setAttribute('x2',x);
+    line.setAttribute('y1',y1); line.setAttribute('y2',y2);
+    line.setAttribute('stroke','#777'); line.setAttribute('stroke-width','0.7');
+    svg.appendChild(line);
+    [[x,y1],[x,y2]].forEach(([ex,ey]) => {
+      const tick = document.createElementNS(ns,'line');
+      tick.setAttribute('x1',ex-4); tick.setAttribute('x2',ex+4);
+      tick.setAttribute('y1',ey); tick.setAttribute('y2',ey);
+      tick.setAttribute('stroke','#777'); tick.setAttribute('stroke-width','0.7');
+      svg.appendChild(tick);
+    });
+    const t = document.createElementNS(ns,'text');
+    t.setAttribute('x',x-8); t.setAttribute('y',(y1+y2)/2+4);
+    t.setAttribute('text-anchor','end'); t.setAttribute('font-size','11');
+    t.setAttribute('fill','#444'); t.setAttribute('font-family','sans-serif');
+    t.textContent = label;
+    svg.appendChild(t);
+  };
+
+  addDimH(pad, pad+v.aw*scale, pad-18, (v.aw/1000).toFixed(2)+'m');
+  addDimV(pad, pad+v.al*scale, pad-26, (v.al/1000).toFixed(2)+'m');
+  addDimH(pad+v.aw*scale, pad+totalW*scale, pad+v.al*scale+20, '+1.00m 超出容許範圍');
+  addDimV(pad+v.al*scale, pad+totalH*scale, pad+totalW*scale+12, '+1.00m');
+
+  const info = document.createElementNS(ns,'text');
+  info.setAttribute('x', pad + totalW*scale/2);
+  info.setAttribute('y', pad + totalH*scale + 20);
+  info.setAttribute('text-anchor','middle');
+  info.setAttribute('font-size','11');
+  info.setAttribute('fill','#888');
+  info.setAttribute('font-family','sans-serif');
+  info.textContent = `${v.brand} ${v.model}  |  ${v.watt}W × ${count}片 = ${totalKw}kW  |  區域內 ${insideCount}片 + 超出 ${outsideCount}片`;
+  svg.appendChild(info);
+
+  area.appendChild(svg);
+  lastSVGContent = new XMLSerializer().serializeToString(svg);
+}
+
+function downloadPNG() {
+  if(!lastSVGContent) { alert('請先生成配置圖'); return; }
+  const svg = document.querySelector('#canvasArea svg');
+  const w = parseInt(svg.getAttribute('width'));
+  const h = parseInt(svg.getAttribute('height'));
+  const canvas = document.createElement('canvas');
+  canvas.width = w*2; canvas.height = h*2;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0,0,w*2,h*2);
+  const img = new Image();
+  const blob = new Blob([lastSVGContent],{type:'image/svg+xml;charset=utf-8'});
+  const url = URL.createObjectURL(blob);
+  img.onload = () => {
+    ctx.scale(2,2); ctx.drawImage(img,0,0);
+    const a = document.createElement('a');
+    a.href = canvas.toDataURL('image/png');
+    a.download = 'solar_layout.png';
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+  img.src = url;
+}
+
+function downloadSVG() {
+  if(!lastSVGContent) { alert('請先生成配置圖'); return; }
+  const blob = new Blob([lastSVGContent],{type:'image/svg+xml;charset=utf-8'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'solar_layout.svg';
+  a.click();
+}
+</script>
+</body>
+</html>
