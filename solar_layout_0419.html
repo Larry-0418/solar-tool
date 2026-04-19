@@ -78,11 +78,24 @@ header span { font-size: 12px; color: #7ab8d8; margin-left: 8px; }
 .search-btn { width:100%; border:1px solid #d0d4da; background:#fafbfc; color:#333; border-radius:7px; padding:6px; font-size:12px; cursor:pointer; font-family:inherit; transition:all .15s; margin-top:2px; }
 .search-btn:hover { border-color:#378ADD; color:#185FA5; }
 @media (max-width:700px) {
-  .main { grid-template-columns:1fr; }
-  .cell-input { grid-column:1; grid-row:2; max-height:none; }
-  .cell-stats { grid-column:1; grid-row:3; }
-  .cell-btns { grid-column:1; grid-row:4; flex-direction:row; flex-wrap:wrap; }
-  .stats { grid-template-columns:repeat(3,1fr); }
+  header { padding:10px 14px; }
+  header h1 { font-size:14px; }
+  header span { display:none; }
+  .page { margin:8px auto; padding:0 6px 32px; }
+  .main { grid-template-columns:1fr; border-radius:8px; }
+  .cell-canvas { grid-column:1; grid-row:1; min-height:280px; padding:6px; }
+  .cell-input { grid-column:1; grid-row:2; max-height:none; padding:10px; }
+  .cell-stats { grid-column:1; grid-row:3; padding:8px 10px; }
+  .cell-btns { grid-column:1; grid-row:4; padding:10px; flex-direction:row; flex-wrap:wrap; gap:6px; }
+  .btn-gen { flex:1; min-width:120px; }
+  .btn-dl { flex:1; min-width:100px; font-size:10px; padding:7px 4px; }
+  .stats { grid-template-columns:repeat(3,1fr); gap:5px; }
+  .stat .val { font-size:13px; }
+  .stat .lbl { font-size:9px; }
+  .canvas-wrap { min-height:260px; overflow-x:auto; overflow-y:hidden;
+    align-items:flex-start; justify-content:flex-start; padding:4px; }
+  .tab { font-size:11px; padding:5px 4px; }
+  .sec-title { margin-top:10px; }
 }
 </style>
 </head>
@@ -644,8 +657,9 @@ function generateRect() {
   const leftPad = DIM_OFFSET + extraPad + 10;
   const botPad = 20, rightPad = 16;
 
+  const isMobile = window.innerWidth <= 700;
   const area = document.getElementById('canvasArea');
-  const canW = Math.max(area.clientWidth - 16, 400);
+  const canW = Math.max(area.clientWidth - 16, isMobile ? 320 : 400);
   const dispOver = Math.max(OVER, 200);
   const viewW = aw + dispOver * 2, viewH = al + dispOver * 2;
   const scale = (canW - leftPad - rightPad) / viewW;
@@ -654,9 +668,12 @@ function generateRect() {
 
   area.innerHTML = '';
   const svg = document.createElementNS(ns, 'svg');
-  svg.setAttribute('width', canW); svg.setAttribute('height', canH);
+  svg.setAttribute('width', '100%');
+  svg.setAttribute('height', canH);
   svg.setAttribute('viewBox', `0 0 ${canW} ${canH}`);
-  svg.setAttribute('xmlns', ns); svg.style.display = 'block';
+  svg.setAttribute('xmlns', ns);
+  svg.style.display = 'block';
+  svg.style.minWidth = isMobile ? '0' : canW + 'px';
 
   // 超出範圍底色
   if (allowOver) {
@@ -812,7 +829,8 @@ function downloadPNG() {
   if (!lastSVG) { alert('請先生成配置圖'); return; }
   const svgEl = document.querySelector(currentMode === 'pdf' ? '#resultArea svg' : '#canvasArea svg');
   if (!svgEl) { alert('找不到圖面'); return; }
-  const w = parseInt(svgEl.getAttribute('width')), h = parseInt(svgEl.getAttribute('height'));
+  const vb = svgEl.getAttribute('viewBox').split(' ');
+  const w = parseInt(vb[2]), h = parseInt(vb[3]);
   const canvas = document.createElement('canvas');
   canvas.width = w * 2; canvas.height = h * 2;
   const ctx = canvas.getContext('2d');
