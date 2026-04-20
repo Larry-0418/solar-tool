@@ -1,0 +1,664 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0a0a0a">
+<title>發票掃描器</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0a0a0a;
+    --bg2: #141414;
+    --bg3: #1e1e1e;
+    --border: rgba(255,255,255,0.08);
+    --border2: rgba(255,255,255,0.15);
+    --text: #f0f0f0;
+    --text2: #888;
+    --text3: #555;
+    --accent: #e8ff47;
+    --accent2: #b8cc30;
+    --success: #47ff8e;
+    --error: #ff4747;
+    --info: #47b8ff;
+  }
+
+  html, body {
+    height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Noto Sans TC', sans-serif;
+    -webkit-font-smoothing: antialiased;
+    overscroll-behavior: none;
+  }
+
+  #app {
+    min-height: 100vh;
+    max-width: 480px;
+    margin: 0 auto;
+    padding: 0 0 2rem;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* Header */
+  .header {
+    padding: 1.5rem 1.25rem 1rem;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: flex-end;
+    gap: 12px;
+  }
+  .header-icon {
+    width: 40px; height: 40px;
+    background: var(--accent);
+    border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  .header-icon svg { width: 22px; height: 22px; }
+  .header-text h1 {
+    font-size: 20px; font-weight: 700;
+    color: var(--text); letter-spacing: -0.3px;
+  }
+  .header-text p {
+    font-size: 12px; color: var(--text2); margin-top: 2px;
+  }
+
+  /* Camera area */
+  .camera-wrap {
+    margin: 1.25rem 1.25rem 0;
+    position: relative;
+    border-radius: 16px;
+    overflow: hidden;
+    background: #000;
+    aspect-ratio: 3/4;
+    border: 1px solid var(--border);
+  }
+
+  #video {
+    width: 100%; height: 100%;
+    object-fit: cover;
+    display: none;
+  }
+
+  #canvas { display: none; }
+
+  #preview-img {
+    width: 100%; height: 100%;
+    object-fit: contain;
+    display: none;
+    background: #000;
+  }
+
+  .placeholder {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 12px;
+  }
+  .placeholder-icon {
+    width: 64px; height: 64px;
+    border-radius: 50%;
+    background: var(--bg3);
+    border: 1px solid var(--border2);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .placeholder-icon svg { width: 28px; height: 28px; color: var(--text3); }
+  .placeholder p { font-size: 13px; color: var(--text3); }
+
+  /* Scan frame overlay */
+  .scan-overlay {
+    position: absolute; inset: 0;
+    pointer-events: none;
+    display: none;
+  }
+  .scan-overlay.active { display: block; }
+  .scan-frame {
+    position: absolute;
+    top: 12%; left: 8%; right: 8%; bottom: 12%;
+    border: none;
+  }
+  .scan-corner {
+    position: absolute;
+    width: 24px; height: 24px;
+  }
+  .scan-corner::before, .scan-corner::after {
+    content: ''; position: absolute;
+    background: var(--accent);
+  }
+  .scan-corner.tl { top: 0; left: 0; }
+  .scan-corner.tl::before { top: 0; left: 0; width: 100%; height: 3px; border-radius: 3px 0 0 0; }
+  .scan-corner.tl::after { top: 0; left: 0; width: 3px; height: 100%; border-radius: 3px 0 0 0; }
+  .scan-corner.tr { top: 0; right: 0; }
+  .scan-corner.tr::before { top: 0; right: 0; width: 100%; height: 3px; border-radius: 0 3px 0 0; }
+  .scan-corner.tr::after { top: 0; right: 0; width: 3px; height: 100%; border-radius: 0 3px 0 0; }
+  .scan-corner.bl { bottom: 0; left: 0; }
+  .scan-corner.bl::before { bottom: 0; left: 0; width: 100%; height: 3px; border-radius: 0 0 0 3px; }
+  .scan-corner.bl::after { bottom: 0; left: 0; width: 3px; height: 100%; border-radius: 0 0 0 3px; }
+  .scan-corner.br { bottom: 0; right: 0; }
+  .scan-corner.br::before { bottom: 0; right: 0; width: 100%; height: 3px; border-radius: 0 0 3px 0; }
+  .scan-corner.br::after { bottom: 0; right: 0; width: 3px; height: 100%; border-radius: 0 0 3px 0; }
+
+  .scan-line {
+    position: absolute;
+    left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(to right, transparent, var(--accent), transparent);
+    animation: scanMove 2s ease-in-out infinite;
+    top: 0;
+  }
+  @keyframes scanMove {
+    0% { top: 0%; opacity: 0; }
+    10% { opacity: 1; }
+    90% { opacity: 1; }
+    100% { top: 100%; opacity: 0; }
+  }
+
+  .scan-hint {
+    position: absolute;
+    bottom: 14%;
+    left: 50%; transform: translateX(-50%);
+    background: rgba(0,0,0,0.65);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    color: rgba(255,255,255,0.85);
+    font-size: 12px;
+    padding: 6px 14px;
+    border-radius: 20px;
+    white-space: nowrap;
+    border: 1px solid rgba(255,255,255,0.1);
+  }
+
+  /* Status */
+  .status-bar {
+    margin: 1rem 1.25rem 0;
+    padding: 10px 14px;
+    border-radius: 10px;
+    font-size: 13px;
+    display: flex; align-items: center; gap: 8px;
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    color: var(--text2);
+    min-height: 42px;
+    transition: all 0.2s;
+  }
+  .status-bar.active { background: rgba(71,184,255,0.08); border-color: rgba(71,184,255,0.25); color: var(--info); }
+  .status-bar.success { background: rgba(71,255,142,0.08); border-color: rgba(71,255,142,0.25); color: var(--success); }
+  .status-bar.error { background: rgba(255,71,71,0.08); border-color: rgba(255,71,71,0.25); color: var(--error); }
+  .status-dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: currentColor; flex-shrink: 0;
+  }
+  .status-bar.active .status-dot { animation: blink 1s ease-in-out infinite; }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+  /* Buttons */
+  .btn-group {
+    margin: 1rem 1.25rem 0;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+  .btn-full { grid-column: 1 / -1; }
+
+  button {
+    padding: 12px 16px;
+    border-radius: 12px;
+    border: 1px solid var(--border2);
+    background: var(--bg2);
+    color: var(--text);
+    font-size: 14px;
+    font-family: 'Noto Sans TC', sans-serif;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    -webkit-tap-highlight-color: transparent;
+  }
+  button:hover { background: var(--bg3); border-color: var(--border2); }
+  button:active { transform: scale(0.97); }
+  button:disabled { opacity: 0.3; cursor: not-allowed; }
+  button:disabled:active { transform: none; }
+
+  button.primary {
+    background: var(--accent);
+    color: #0a0a0a;
+    border-color: transparent;
+    font-weight: 700;
+  }
+  button.primary:hover { background: var(--accent2); }
+
+  /* Loading */
+  .loading-wrap {
+    display: none;
+    margin: 1rem 1.25rem 0;
+    padding: 1rem;
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    text-align: center;
+  }
+  .loading-wrap.show { display: block; }
+  .loader {
+    display: inline-block;
+    width: 20px; height: 20px;
+    border: 2px solid var(--border2);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    margin-bottom: 8px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .loading-wrap p { font-size: 13px; color: var(--text2); }
+
+  /* Result */
+  .result-wrap {
+    display: none;
+    margin: 1rem 1.25rem 0;
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    overflow: hidden;
+  }
+  .result-wrap.show { display: block; }
+  .result-header {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .result-header span {
+    font-size: 13px; font-weight: 700;
+    color: var(--accent); letter-spacing: 0.5px;
+    text-transform: uppercase;
+  }
+  .result-badge {
+    font-size: 11px; padding: 3px 10px;
+    border-radius: 20px;
+    background: rgba(71,255,142,0.12);
+    color: var(--success);
+    border: 1px solid rgba(71,255,142,0.2);
+  }
+  .result-fields { padding: 8px 0; }
+  .field-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    padding: 10px 16px;
+    gap: 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  .field-row:last-child { border-bottom: none; }
+  .field-label {
+    font-size: 12px; color: var(--text3);
+    flex-shrink: 0; padding-top: 1px;
+    font-family: 'JetBrains Mono', monospace;
+    text-transform: uppercase; letter-spacing: 0.5px;
+  }
+  .field-value {
+    font-size: 14px; color: var(--text);
+    text-align: right; word-break: break-all;
+    font-weight: 500;
+  }
+  .field-value.total {
+    color: var(--accent);
+    font-size: 18px;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .result-actions {
+    padding: 12px 16px;
+    border-top: 1px solid var(--border);
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+
+  /* Toast */
+  .toast {
+    position: fixed;
+    bottom: 2rem; left: 50%;
+    transform: translateX(-50%) translateY(20px);
+    background: var(--bg3);
+    color: var(--text);
+    font-size: 13px; font-weight: 500;
+    padding: 10px 20px;
+    border-radius: 24px;
+    border: 1px solid var(--border2);
+    opacity: 0;
+    transition: all 0.3s;
+    white-space: nowrap;
+    z-index: 100;
+    pointer-events: none;
+  }
+  .toast.show {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <div class="header">
+    <div class="header-icon">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#0a0a0a" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="5" y="2" width="14" height="20" rx="2"/>
+        <line x1="9" y1="7" x2="15" y2="7"/>
+        <line x1="9" y1="11" x2="15" y2="11"/>
+        <line x1="9" y1="15" x2="12" y2="15"/>
+      </svg>
+    </div>
+    <div class="header-text">
+      <h1>發票掃描器</h1>
+      <p>拍照自動辨識發票內容</p>
+    </div>
+  </div>
+
+  <div class="camera-wrap">
+    <div class="placeholder" id="placeholder">
+      <div class="placeholder-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+          <circle cx="12" cy="13" r="4"/>
+        </svg>
+      </div>
+      <p>點擊「開啟相機」開始掃描</p>
+    </div>
+    <video id="video" autoplay playsinline muted></video>
+    <canvas id="canvas"></canvas>
+    <img id="preview-img" alt="發票預覽">
+    <div class="scan-overlay" id="scan-overlay">
+      <div class="scan-frame">
+        <div class="scan-corner tl"></div>
+        <div class="scan-corner tr"></div>
+        <div class="scan-corner bl"></div>
+        <div class="scan-corner br"></div>
+        <div class="scan-line"></div>
+      </div>
+      <div class="scan-hint">將發票對準框內</div>
+    </div>
+  </div>
+
+  <div class="status-bar" id="status-bar">
+    <div class="status-dot"></div>
+    <span id="status-text">等待開啟相機</span>
+  </div>
+
+  <div class="btn-group">
+    <button id="btn-start" onclick="startCamera()">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+      開啟相機
+    </button>
+    <button id="btn-upload" onclick="document.getElementById('file-input').click()">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+      上傳圖片
+    </button>
+    <input type="file" id="file-input" accept="image/*" style="display:none" onchange="handleFileUpload(event)">
+    <button id="btn-capture" onclick="capturePhoto()" disabled>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg>
+      拍照
+    </button>
+    <button id="btn-retake" onclick="retake()" disabled>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-4.16"/></svg>
+      重拍
+    </button>
+    <button class="primary btn-full" id="btn-analyze" onclick="analyzeInvoice()" disabled>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      辨識發票內容
+    </button>
+  </div>
+
+  <div class="loading-wrap" id="loading-wrap">
+    <div class="loader"></div>
+    <p>AI 辨識中，請稍候...</p>
+  </div>
+
+  <div class="result-wrap" id="result-wrap">
+    <div class="result-header">
+      <span>辨識結果</span>
+      <div class="result-badge">完成</div>
+    </div>
+    <div class="result-fields" id="result-fields"></div>
+    <div class="result-actions">
+      <button onclick="copyResult()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        複製文字
+      </button>
+      <button onclick="exportCSV()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+        存成 CSV
+      </button>
+    </div>
+  </div>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+let stream = null;
+let capturedBase64 = null;
+let lastResult = null;
+
+const video = document.getElementById('video');
+const canvas = document.getElementById('canvas');
+const previewImg = document.getElementById('preview-img');
+const placeholder = document.getElementById('placeholder');
+const scanOverlay = document.getElementById('scan-overlay');
+
+function setStatus(msg, type = '') {
+  const bar = document.getElementById('status-bar');
+  const txt = document.getElementById('status-text');
+  bar.className = 'status-bar' + (type ? ' ' + type : '');
+  txt.textContent = msg;
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+async function startCamera() {
+  try {
+    setStatus('啟動相機中...', 'active');
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } }
+    });
+    video.srcObject = stream;
+    video.style.display = 'block';
+    placeholder.style.display = 'none';
+    scanOverlay.classList.add('active');
+    document.getElementById('btn-capture').disabled = false;
+    document.getElementById('btn-start').disabled = true;
+    setStatus('對準發票後按「拍照」', 'active');
+  } catch(e) {
+    setStatus('無法開啟相機：' + (e.message || e), 'error');
+  }
+}
+
+function capturePhoto() {
+  canvas.width = video.videoWidth || 1280;
+  canvas.height = video.videoHeight || 960;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(video, 0, 0);
+  const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
+  capturedBase64 = dataUrl.split(',')[1];
+  previewImg.src = dataUrl;
+  previewImg.style.display = 'block';
+  video.style.display = 'none';
+  scanOverlay.classList.remove('active');
+  if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
+  document.getElementById('btn-capture').disabled = true;
+  document.getElementById('btn-retake').disabled = false;
+  document.getElementById('btn-analyze').disabled = false;
+  document.getElementById('btn-start').disabled = false;
+  setStatus('拍照完成，點擊「辨識發票內容」', 'success');
+}
+
+function retake() {
+  previewImg.style.display = 'none';
+  previewImg.src = '';
+  capturedBase64 = null;
+  lastResult = null;
+  placeholder.style.display = 'flex';
+  scanOverlay.classList.remove('active');
+  document.getElementById('btn-capture').disabled = true;
+  document.getElementById('btn-retake').disabled = true;
+  document.getElementById('btn-analyze').disabled = true;
+  document.getElementById('btn-start').disabled = false;
+  document.getElementById('result-wrap').classList.remove('show');
+  document.getElementById('loading-wrap').classList.remove('show');
+  setStatus('等待開啟相機');
+}
+
+function handleFileUpload(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const dataUrl = e.target.result;
+    capturedBase64 = dataUrl.split(',')[1];
+    previewImg.src = dataUrl;
+    previewImg.style.display = 'block';
+    placeholder.style.display = 'none';
+    scanOverlay.classList.remove('active');
+    video.style.display = 'none';
+    if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
+    document.getElementById('btn-capture').disabled = true;
+    document.getElementById('btn-retake').disabled = false;
+    document.getElementById('btn-analyze').disabled = false;
+    document.getElementById('btn-start').disabled = false;
+    setStatus('圖片已載入，點擊「辨識發票內容」', 'success');
+  };
+  reader.readAsDataURL(file);
+  event.target.value = '';
+}
+
+async function analyzeInvoice() {
+  if (!capturedBase64) return;
+  document.getElementById('btn-analyze').disabled = true;
+  document.getElementById('loading-wrap').classList.add('show');
+  document.getElementById('result-wrap').classList.remove('show');
+  setStatus('AI 辨識中...', 'active');
+
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1000,
+        messages: [{
+          role: 'user',
+          content: [
+            {
+              type: 'image',
+              source: { type: 'base64', media_type: 'image/jpeg', data: capturedBase64 }
+            },
+            {
+              type: 'text',
+              text: `請辨識這張發票圖片，只回傳 JSON 格式，不要任何說明或 markdown：
+{
+  "invoice_number": "發票號碼",
+  "date": "發票日期（格式：YYYY/MM/DD）",
+  "seller": "賣方名稱",
+  "seller_tax_id": "賣方統一編號",
+  "buyer_tax_id": "買方統一編號（無則填無）",
+  "subtotal": "未稅金額（只填數字）",
+  "tax": "稅額（只填數字）",
+  "total": "含稅總金額（只填數字）",
+  "items": "品項摘要（簡短20字內）"
+}
+若任何欄位無法辨識，填「—」。只回傳 JSON。`
+            }
+          ]
+        }]
+      })
+    });
+
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error?.message || '辨識失敗');
+
+    const text = data.content.map(i => i.text || '').join('');
+    const clean = text.replace(/```json|```/g, '').trim();
+    const parsed = JSON.parse(clean);
+    lastResult = parsed;
+
+    const fieldDefs = [
+      { key: 'invoice_number', label: '發票號碼' },
+      { key: 'date', label: '日期' },
+      { key: 'seller', label: '賣方' },
+      { key: 'seller_tax_id', label: '賣方統編' },
+      { key: 'buyer_tax_id', label: '買方統編' },
+      { key: 'subtotal', label: '未稅金額' },
+      { key: 'tax', label: '稅額' },
+      { key: 'total', label: '含稅總計', highlight: true },
+      { key: 'items', label: '品項' },
+    ];
+
+    let html = '';
+    for (const f of fieldDefs) {
+      const val = parsed[f.key] || '—';
+      const valClass = f.highlight ? 'field-value total' : 'field-value';
+      const dispVal = f.highlight && val !== '—' ? 'NT$ ' + Number(val).toLocaleString() : val;
+      html += `<div class="field-row">
+        <span class="field-label">${f.label}</span>
+        <span class="${valClass}">${dispVal}</span>
+      </div>`;
+    }
+
+    document.getElementById('result-fields').innerHTML = html;
+    document.getElementById('result-wrap').classList.add('show');
+    setStatus('辨識完成！', 'success');
+  } catch(e) {
+    setStatus('辨識失敗：' + e.message, 'error');
+    document.getElementById('btn-analyze').disabled = false;
+  }
+
+  document.getElementById('loading-wrap').classList.remove('show');
+}
+
+function copyResult() {
+  if (!lastResult) return;
+  const labels = {
+    invoice_number: '發票號碼', date: '日期', seller: '賣方',
+    seller_tax_id: '賣方統編', buyer_tax_id: '買方統編',
+    subtotal: '未稅金額', tax: '稅額', total: '含稅總計', items: '品項'
+  };
+  const lines = Object.entries(labels).map(([k, l]) => `${l}：${lastResult[k] || '—'}`).join('\n');
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(lines).then(() => showToast('已複製到剪貼簿'));
+  } else {
+    const ta = document.createElement('textarea');
+    ta.value = lines; document.body.appendChild(ta);
+    ta.select(); document.execCommand('copy');
+    document.body.removeChild(ta);
+    showToast('已複製');
+  }
+}
+
+function exportCSV() {
+  if (!lastResult) return;
+  const headers = ['發票號碼','日期','賣方','賣方統編','買方統編','未稅金額','稅額','含稅總計','品項'];
+  const keys = ['invoice_number','date','seller','seller_tax_id','buyer_tax_id','subtotal','tax','total','items'];
+  const row = keys.map(k => '"' + (lastResult[k] || '').replace(/"/g, '""') + '"');
+  const csv = '\uFEFF' + headers.join(',') + '\n' + row.join(',');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const now = new Date();
+  a.href = url;
+  a.download = `發票_${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('CSV 已下載');
+}
+</script>
+</body>
+</html>
