@@ -1,0 +1,902 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>太陽能板配置工具</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Segoe UI', 'Microsoft JhengHei', sans-serif; background: #f4f5f7; color: #222; min-height: 100vh; }
+header { background: #0d1f2d; color: #fff; padding: 14px 28px; display: flex; align-items: center; gap: 12px; }
+header h1 { font-size: 20px; font-weight: 600; }
+header span { font-size: 14px; color: #7ab8d8; margin-left: 8px; }
+.online-badge { margin-left: auto; display:flex; align-items:center; gap:6px; background:#1a3a52; border-radius:99px; padding:5px 12px; font-size:12px; color:#7ab8d8; flex-shrink:0; }
+.online-dot { width:8px; height:8px; border-radius:50%; background:#4CAF50; animation:pulse 2s infinite; }
+@keyframes pulse { 0%,100%{opacity:1;} 50%{opacity:0.4;} }
+.page { max-width: 1140px; margin: 20px auto; padding: 0 16px 48px; }
+.main { display: grid; grid-template-columns: minmax(0,1fr) 270px; grid-template-rows: auto auto; border: 1.5px solid #d0d4da; border-radius: 12px; background: #fff; overflow: visible; }
+.cell { border: 0.5px solid #e2e4e8; }
+.cell-canvas { grid-column:1; grid-row:1; padding:8px; min-height:460px; display:flex; flex-direction:column; gap:6px; overflow:hidden; }
+.cell-input { grid-column:2; grid-row:1; padding:14px; display:flex; flex-direction:column; gap:0; overflow-y:auto; overflow-x:hidden; max-height:none; }
+.cell-stats { grid-column:1; grid-row:2; padding:10px 14px; }
+.cell-btns { grid-column:2; grid-row:2; padding:14px; display:flex; flex-direction:column; gap:6px; justify-content:center; }
+.tab-bar { display:flex; gap:4px; flex-shrink:0; }
+.tab { flex:1; padding:6px; text-align:center; font-size:14px; cursor:pointer; border:1px solid #d0d4da; border-radius:7px; color:#666; background:#fafbfc; font-family:inherit; transition:all .15s; }
+.tab.sel { background:#0d1f2d; color:#fff; border-color:#0d1f2d; font-weight:600; }
+.canvas-wrap { background:#e8e9ec; border-radius:8px; flex:1; display:flex; align-items:center; justify-content:center; overflow:auto; padding:4px; min-height:200px; }
+.pdf-preview { background:#fff; border:0.5px solid #d0d4da; border-radius:8px; overflow:hidden; position:relative; flex-shrink:0; cursor:crosshair; }
+.pdf-preview canvas { display:block; max-width:100%; }
+#pdfOverlay { position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none; }
+.empty-hint { color:#aaa; font-size:14px; text-align:center; line-height:1.8; }
+.sec-title { font-size:12px; font-weight:600; color:#888; text-transform:uppercase; letter-spacing:.06em; margin-bottom:8px; margin-top:12px; }
+.sec-title:first-child { margin-top:0; }
+.gap-col { display:flex; flex-direction:column; gap:7px; margin-bottom:4px; }
+.row2 { display:grid; grid-template-columns:1fr 1fr; gap:6px; }
+.field { display:flex; flex-direction:column; gap:2px; }
+.field label { font-size:13px; color:#555; }
+.field input[type=number], .field input[type=text] { width:100%; padding:5px 7px; border:1px solid #d0d4da; border-radius:6px; font-size:14px; color:#222; background:#fafbfc; font-family:inherit; }
+.field input:focus { outline:none; border-color:#378ADD; background:#fff; }
+.orient-btns { display:flex; gap:5px; margin-top:2px; }
+.orient-btn { flex:1; border:1px solid #d0d4da; border-radius:6px; padding:5px; text-align:center; font-size:13px; cursor:pointer; color:#666; background:#fafbfc; font-family:inherit; transition:all .15s; }
+.orient-btn.sel { border-color:#378ADD; background:#e6f1fb; color:#185FA5; font-weight:600; }
+.toggle-row { display:flex; align-items:center; justify-content:space-between; padding:6px 0; border-top:1px solid #f0f0f0; }
+.toggle-label { font-size:13px; color:#555; }
+.toggle { position:relative; width:32px; height:18px; flex-shrink:0; }
+.toggle input { opacity:0; width:0; height:0; position:absolute; }
+.toggle-track { position:absolute; inset:0; background:#ccc; border-radius:99px; cursor:pointer; transition:background .2s; }
+.toggle input:checked + .toggle-track { background:#378ADD; }
+.toggle-thumb { position:absolute; top:3px; left:3px; width:12px; height:12px; background:#fff; border-radius:50%; transition:transform .2s; pointer-events:none; }
+.toggle input:checked ~ .toggle-thumb { transform:translateX(14px); }
+.stats { display:grid; grid-template-columns:repeat(5,1fr); gap:6px; }
+.stat { background:#f4f5f7; border-radius:8px; padding:7px 9px; }
+.stat .lbl { font-size:12px; color:#888; margin-bottom:2px; }
+.stat .val { font-size:18px; font-weight:700; color:#0d1f2d; line-height:1; }
+.stat .unt { font-size:11px; color:#aaa; margin-top:2px; }
+.legend { display:flex; gap:12px; font-size:12px; color:#666; flex-wrap:wrap; margin-top:8px; }
+.legend-item { display:flex; align-items:center; gap:4px; }
+.legend-box { width:13px; height:9px; border-radius:1px; flex-shrink:0; }
+.btn-gen { background:#0d1f2d; color:#fff; border:none; border-radius:8px; padding:9px; font-size:14px; font-weight:600; cursor:pointer; font-family:inherit; transition:background .15s; }
+.btn-gen:hover { background:#1a3a52; }
+.btn-dl { border:1px solid #d0d4da; background:#fff; color:#333; border-radius:8px; padding:7px; font-size:13px; cursor:pointer; font-family:inherit; transition:all .15s; }
+.btn-dl:hover { border-color:#378ADD; color:#185FA5; background:#f0f7ff; }
+.note { font-size:12px; color:#aaa; line-height:1.4; margin-top:3px; }
+.font-row { display:flex; align-items:center; gap:6px; }
+.font-row label { font-size:13px; color:#555; white-space:nowrap; }
+.font-row input[type=range] { flex:1; }
+.font-row span { font-size:13px; color:#222; min-width:18px; text-align:right; }
+.upload-zone { border:1.5px dashed #d0d4da; border-radius:8px; padding:14px; text-align:center; cursor:pointer; transition:all .15s; }
+.upload-zone:hover { border-color:#378ADD; background:#f0f7ff; }
+.upload-zone.has-file { border-color:#1D9E75; background:#EAF3DE; }
+.upload-zone p { font-size:14px; color:#555; margin-bottom:2px; }
+.upload-zone small { font-size:12px; color:#aaa; }
+.status-msg { font-size:13px; padding:6px 9px; border-radius:7px; margin-top:5px; line-height:1.5; }
+.status-ok { background:#EAF3DE; color:#3B6D11; }
+.status-err { background:#FCEBEB; color:#A32D2D; }
+.status-info { background:#E6F1FB; color:#185FA5; }
+.panel-section { display:none; }
+.panel-section.active { display:block; }
+@media (max-width:700px) {
+  header { padding:10px 14px; }
+  header h1 { font-size:17px; }
+  header span { display:none; }
+  .page { margin:8px auto; padding:0 6px 32px; }
+  .main { grid-template-columns:1fr; border-radius:8px; }
+  .cell-canvas { grid-column:1; grid-row:1; min-height:280px; padding:6px; }
+  .cell-input { grid-column:1; grid-row:2; max-height:none; padding:10px; }
+  .cell-stats { grid-column:1; grid-row:3; padding:8px 10px; }
+  .cell-btns { grid-column:1; grid-row:4; padding:10px; flex-direction:row; flex-wrap:wrap; gap:6px; }
+  .btn-gen { flex:1; min-width:120px; }
+  .btn-dl { flex:1; min-width:100px; font-size:12px; padding:7px 4px; }
+  .stats { grid-template-columns:repeat(3,1fr); gap:5px; }
+  .stat .val { font-size:15px; }
+  .stat .lbl { font-size:11px; }
+  .canvas-wrap { min-height:260px; overflow-x:auto; overflow-y:hidden; align-items:flex-start; justify-content:flex-start; padding:4px; }
+  .tab { font-size:13px; padding:5px 4px; }
+}
+</style>
+</head>
+<body>
+
+<header>
+  <svg width="26" height="26" viewBox="0 0 28 28" fill="none">
+    <rect x="2" y="8" width="24" height="14" rx="2" fill="#378ADD" opacity="0.3"/>
+    <rect x="2" y="8" width="24" height="14" rx="2" stroke="#7ab8d8" stroke-width="1.2"/>
+    <line x1="2" y1="15" x2="26" y2="15" stroke="#7ab8d8" stroke-width="0.8"/>
+    <line x1="8" y1="8" x2="8" y2="22" stroke="#7ab8d8" stroke-width="0.8"/>
+    <line x1="14" y1="8" x2="14" y2="22" stroke="#7ab8d8" stroke-width="0.8"/>
+    <line x1="20" y1="8" x2="20" y2="22" stroke="#7ab8d8" stroke-width="0.8"/>
+    <line x1="14" y1="2" x2="14" y2="6" stroke="#FFD700" stroke-width="1.5" stroke-linecap="round"/>
+    <line x1="20" y1="4" x2="18" y2="7" stroke="#FFD700" stroke-width="1.5" stroke-linecap="round"/>
+    <line x1="8" y1="4" x2="10" y2="7" stroke="#FFD700" stroke-width="1.5" stroke-linecap="round"/>
+  </svg>
+  <h1>太陽能板配置工具 <span>Solar Panel Layout</span></h1>
+  <div class="online-badge">
+    <div class="online-dot"></div>
+    <span id="online-count">1</span> 人在線
+  </div>
+  <div class="online-badge" style="margin-left:8px;">
+    📅 今日開啟 <span id="daily-count">0</span> 次
+  </div>
+</header>
+
+<div class="page">
+<div class="main">
+
+  <div class="cell cell-canvas">
+    <div class="tab-bar">
+      <button class="tab sel" onclick="switchMode('rect')">矩形區域</button>
+      <button class="tab" onclick="switchMode('pdf')">非矩形區域</button>
+    </div>
+
+    <!-- 矩形模式 -->
+    <div id="view-rect" style="flex:1;display:flex;align-items:stretch;">
+      <div class="canvas-wrap" id="canvasArea"><p class="empty-hint">點擊「生成配置圖」開始</p></div>
+    </div>
+
+    <!-- 非矩形模式：PDF預覽 + 配置結果 -->
+    <div id="view-pdf" style="flex:1;display:none;flex-direction:column;gap:6px;">
+      <div class="pdf-preview" id="pdfPreview" style="display:none;">
+        <canvas id="pdfCanvas"></canvas>
+        <canvas id="pdfOverlay"></canvas>
+      </div>
+      <div class="canvas-wrap" id="pdfResultArea" style="min-height:200px;display:none;">
+        <p class="empty-hint">點擊「生成配置圖」產生排佈結果</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="cell cell-input">
+
+    <div class="sec-title">太陽能板</div>
+    <div class="gap-col">
+      <div class="field"><label>型號</label><input type="text" id="model" value="Tiger Neo N-type"></div>
+      <div class="row2">
+        <div class="field"><label>瓦數 (W)</label><input type="number" id="watt" value="580" min="1"></div>
+        <div class="field"><label>邊距 (mm)</label><input type="number" id="margin" value="0" min="0"></div>
+      </div>
+      <div class="row2">
+        <div class="field"><label>長度 (mm)</label><input type="number" id="plen" value="2278" min="1"></div>
+        <div class="field"><label>寬度 (mm)</label><input type="number" id="pwid" value="1134" min="1"></div>
+      </div>
+      <div class="field">
+        <label>排列方向</label>
+        <div class="orient-btns">
+          <button class="orient-btn sel" id="btn-v" onclick="setOrient('v')">直式 ↕</button>
+          <button class="orient-btn" id="btn-h" onclick="setOrient('h')">橫式 ↔</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 矩形鋪排區域 -->
+    <div id="sec-rect" class="panel-section active">
+      <div class="sec-title">鋪排區域</div>
+      <div class="gap-col">
+        <div class="row2">
+          <div class="field"><label>寬度 (mm)</label><input type="number" id="awidth" value="8000" min="1"></div>
+          <div class="field"><label>長度 (mm)</label><input type="number" id="alength" value="6000" min="1"></div>
+        </div>
+        <div class="field"><label>太陽能板間距 (mm)</label><input type="number" id="gap" value="20" min="0"></div>
+      </div>
+      <div class="toggle-row">
+        <span class="toggle-label">允許超出屋頂 1m</span>
+        <label class="toggle"><input type="checkbox" id="allow-over" checked><div class="toggle-track"></div><div class="toggle-thumb"></div></label>
+      </div>
+    </div>
+
+    <!-- 非矩形 PDF -->
+    <div id="sec-pdf" class="panel-section">
+      <div class="sec-title">非矩形區域</div>
+      <div class="gap-col">
+        <div class="upload-zone" id="uploadZone" onclick="document.getElementById('pdfInput').click()">
+          <p>點擊上傳地籍圖 PDF</p>
+          <small>上傳後點擊灰色地號區域</small>
+          <input type="file" id="pdfInput" accept=".pdf" style="display:none" onchange="handlePDF(this)">
+        </div>
+        <div id="pdfStatus" style="display:none;"></div>
+        <div class="field"><label>太陽能板間距 (mm)</label><input type="number" id="gapPdf" value="20" min="0"></div>
+        <div class="row2">
+          <div class="field">
+            <label>每幾片一座</label>
+            <input type="number" id="panels-per-row" value="4" min="1" step="1">
+          </div>
+          <div class="field">
+            <label>座間距 (mm)</label>
+            <input type="number" id="array-gap" value="1000" min="0" step="100">
+          </div>
+        </div>
+        <div class="note">直式：每 N 行後插入座間距；橫式：每 N 欄後插入座間距</div>
+      </div>
+    </div>
+
+    <div class="sec-title">逆變器</div>
+    <div class="gap-col">
+      <div class="field"><label>型號</label><input type="text" id="inv-model" value="MIN 6000TL-X"></div>
+      <div class="field"><label>容量 (kW)</label><input type="number" id="inv-kw" value="6" min="0.1" step="0.1"></div>
+      <div class="toggle-row">
+        <span class="toggle-label">允許 1.2 倍超載</span>
+        <label class="toggle"><input type="checkbox" id="inv-over" checked><div class="toggle-track"></div><div class="toggle-thumb"></div></label>
+      </div>
+      <div class="note" id="inv-note">允許超載：容量 × 1.2（含等於）</div>
+    </div>
+
+    <div class="sec-title">標註設定</div>
+    <div class="gap-col">
+      <div class="field">
+        <label>標註字體大小</label>
+        <input type="number" id="font-size" value="12" min="6" max="30" step="1">
+      </div>
+    </div>
+
+  </div>
+
+  <div class="cell cell-stats">
+    <div class="stats">
+      <div class="stat"><div class="lbl">配置片數</div><div class="val" id="s-count">—</div><div class="unt">片</div></div>
+      <div class="stat"><div class="lbl">總瓦數</div><div class="val" id="s-watt">—</div><div class="unt">kW</div></div>
+      <div class="stat"><div class="lbl" id="lbl-grid">排列</div><div class="val" id="s-grid">—</div><div class="unt" id="unt-grid">欄×列</div></div>
+      <div class="stat"><div class="lbl">逆變器</div><div class="val" id="s-inv">—</div><div class="unt">台</div></div>
+      <div class="stat"><div class="lbl" id="lbl-area">超出區域</div><div class="val" id="s-area">—</div><div class="unt" id="unt-area">片</div></div>
+    </div>
+    <div class="legend">
+      <div class="legend-item"><div class="legend-box" style="background:#121e2a;border:1.5px solid #8aa8be;"></div>範圍內</div>
+      <div class="legend-item"><div class="legend-box" style="background:#1e3020;border:1.5px solid #7aaa62;"></div>超出（≤1m）</div>
+      <div class="legend-item"><div class="legend-box" style="border:2px solid #cc2200;background:transparent;"></div>鋪排範圍</div>
+    </div>
+  </div>
+
+  <div class="cell cell-btns">
+    <button class="btn-gen" onclick="generate()">生成配置圖</button>
+    <button class="btn-dl" onclick="downloadPNG()">下載 PNG 檔案</button>
+    <button class="btn-dl" onclick="downloadDXF()">下載 DXF 檔案</button>
+  </div>
+
+</div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>
+// ── 每日開啟次數（localStorage，隔日歸零）──
+(function(){
+  const today = new Date().toISOString().slice(0,10); // 'YYYY-MM-DD'
+  const KEY_DATE = 'solar-visit-date';
+  const KEY_COUNT = 'solar-visit-count';
+
+  let storedDate = localStorage.getItem(KEY_DATE);
+  let count = parseInt(localStorage.getItem(KEY_COUNT)) || 0;
+
+  // 如果不是今天，歸零
+  if (storedDate !== today) {
+    count = 0;
+    localStorage.setItem(KEY_DATE, today);
+  }
+
+  // 每次開啟 +1
+  count++;
+  localStorage.setItem(KEY_COUNT, count);
+
+  // 顯示
+  const el = document.getElementById('daily-count');
+  if (el) el.textContent = count;
+})();
+
+// ── 在線人數（用 localStorage + BroadcastChannel 跨分頁計數）──
+(function(){
+  const CHANNEL = 'solar-tool-online';
+  const myId = Math.random().toString(36).slice(2);
+  let peers = new Set([myId]);
+
+  try {
+    const bc = new BroadcastChannel(CHANNEL);
+
+    // 廣播自己上線
+    bc.postMessage({ type: 'join', id: myId });
+
+    // 收到訊息
+    bc.onmessage = (e) => {
+      const { type, id } = e.data;
+      if (type === 'join') {
+        peers.add(id);
+        bc.postMessage({ type: 'ack', id: myId }); // 回應讓對方知道我在
+      } else if (type === 'ack') {
+        peers.add(id);
+      } else if (type === 'leave') {
+        peers.delete(id);
+      }
+      updateCount();
+    };
+
+    // 定時心跳（每 5 秒廣播一次確認在線）
+    setInterval(() => {
+      bc.postMessage({ type: 'join', id: myId });
+    }, 5000);
+
+    // 離開時通知
+    window.addEventListener('beforeunload', () => {
+      bc.postMessage({ type: 'leave', id: myId });
+      bc.close();
+    });
+
+    function updateCount() {
+      const el = document.getElementById('online-count');
+      if (el) el.textContent = peers.size;
+    }
+
+    // 初始顯示
+    updateCount();
+
+  } catch(e) {
+    // BroadcastChannel 不支援時靜默降級
+  }
+})();
+
+// ── 全域 ──
+let orient = 'v', lastSVG = '', lastPanels = [], lastVals = {};
+let currentMode = 'rect';
+let pdfVp = null, pdfGrayPoly = null;
+const PT_TO_REAL_MM = 0.3528 * 500; // 比例尺 1/500
+const RENDER_SCALE = 2.0;
+
+if (typeof pdfjsLib !== 'undefined')
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+document.getElementById('inv-over').addEventListener('change', function () {
+  document.getElementById('inv-note').textContent =
+    this.checked ? '允許超載：容量 × 1.2（含等於）' : '不允許超載：依額定容量計算';
+});
+// ── 模式切換 ──
+function switchMode(m) {
+  currentMode = m;
+  document.querySelectorAll('.tab').forEach((t, i) =>
+    t.className = 'tab' + ((['rect','pdf'][i] === m) ? ' sel' : ''));
+  document.getElementById('sec-rect').className = 'panel-section' + (m === 'rect' ? ' active' : '');
+  document.getElementById('sec-pdf').className = 'panel-section' + (m === 'pdf' ? ' active' : '');
+  document.getElementById('view-rect').style.display = m === 'rect' ? 'flex' : 'none';
+  document.getElementById('view-pdf').style.display = m === 'pdf' ? 'flex' : 'none';
+  if (m === 'pdf') {
+    document.getElementById('lbl-grid').textContent = '面積';
+    document.getElementById('unt-grid').textContent = 'm²';
+    document.getElementById('lbl-area').textContent = '座數';
+    document.getElementById('unt-area').textContent = '座';
+  } else {
+    document.getElementById('lbl-grid').textContent = '排列';
+    document.getElementById('unt-grid').textContent = '欄×列';
+    document.getElementById('lbl-area').textContent = '超出區域';
+    document.getElementById('unt-area').textContent = '片';
+  }
+}
+
+function setOrient(o) {
+  orient = o;
+  document.getElementById('btn-v').className = 'orient-btn' + (o === 'v' ? ' sel' : '');
+  document.getElementById('btn-h').className = 'orient-btn' + (o === 'h' ? ' sel' : '');
+}
+function gf(id) { return parseFloat(document.getElementById(id).value) || 0; }
+function se(id, v) { document.getElementById(id).textContent = v; }
+function gb(id) { return document.getElementById(id).checked; }
+function getFont() { return parseInt(document.getElementById('font-size').value) || 12; }
+
+function showPdfStatus(msg, type) {
+  const el = document.getElementById('pdfStatus');
+  el.style.display = ''; el.className = 'status-msg status-' + type; el.innerHTML = msg;
+}
+
+// ── PDF 上傳 ──
+async function handlePDF(input) {
+  const file = input.files[0]; if (!file) return;
+  const zone = document.getElementById('uploadZone');
+  zone.className = 'upload-zone has-file';
+  zone.querySelector('p').textContent = file.name;
+  zone.querySelector('small').textContent = `${(file.size/1024).toFixed(1)} KB`;
+  showPdfStatus('讀取 PDF 中...', 'status-info');
+  pdfGrayPoly = null;
+
+  try {
+    const ab = await file.arrayBuffer();
+    const doc = await pdfjsLib.getDocument({ data: ab }).promise;
+    const page = await doc.getPage(1);
+    pdfVp = page.getViewport({ scale: 1 });
+
+    // 渲染預覽
+    const cvs = document.getElementById('pdfCanvas');
+    const vp = page.getViewport({ scale: RENDER_SCALE });
+    cvs.width = vp.width; cvs.height = vp.height;
+    cvs.style.maxWidth = '100%'; cvs.style.display = 'block';
+    document.getElementById('pdfPreview').style.display = '';
+    await page.render({ canvasContext: cvs.getContext('2d'), viewport: vp }).promise;
+
+    // 設定 overlay
+    const ovl = document.getElementById('pdfOverlay');
+    ovl.width = cvs.width; ovl.height = cvs.height;
+
+    showPdfStatus('✅ PDF 載入完成！請<b>點擊灰色地號區域</b>，系統自動偵測輪廓', 'status-ok');
+
+    // 點擊事件
+    cvs.onclick = (e) => {
+      const r = cvs.getBoundingClientRect();
+      const cx = Math.round((e.clientX - r.left) * (cvs.width / r.width));
+      const cy = Math.round((e.clientY - r.top) * (cvs.height / r.height));
+      detectGrayRegion(cx, cy);
+    };
+  } catch (e) {
+    showPdfStatus('PDF 載入失敗：' + e.message, 'status-err');
+  }
+}
+
+// ── Flood Fill 偵測灰色區域 ──
+function detectGrayRegion(cx, cy) {
+  const cvs = document.getElementById('pdfCanvas');
+  const ctx = cvs.getContext('2d');
+  const imgData = ctx.getImageData(0, 0, cvs.width, cvs.height);
+  const data = imgData.data;
+  const W = cvs.width, H = cvs.height;
+
+  // 讀取點擊位置像素
+  const idx = (cy * W + cx) * 4;
+  const r = data[idx], g = data[idx+1], b = data[idx+2];
+
+  // 判斷是否為灰色（三色接近且非純白/純黑）
+  const isGray = Math.abs(r-g) < 25 && Math.abs(g-b) < 25 && r > 150 && r < 252;
+  if (!isGray) {
+    showPdfStatus(`點擊位置不是灰色（RGB: ${r},${g},${b}），請點擊<b>灰色填色區域內部</b>`, 'status-err');
+    return;
+  }
+
+  showPdfStatus('偵測中...', 'status-info');
+
+  // Flood Fill BFS
+  const tolerance = 35;
+  const visited = new Uint8Array(W * H);
+  const queue = [[cx, cy]];
+  visited[cy * W + cx] = 1;
+  let fillCount = 0;
+
+  function colorMatch(i) {
+    return Math.abs(data[i] - r) < tolerance &&
+           Math.abs(data[i+1] - g) < tolerance &&
+           Math.abs(data[i+2] - b) < tolerance;
+  }
+
+  while (queue.length > 0 && fillCount < 800000) {
+    const [x, y] = queue.shift();
+    fillCount++;
+    const nb = [[x+1,y],[x-1,y],[x,y+1],[x,y-1]];
+    for (const [nx, ny] of nb) {
+      if (nx < 0 || nx >= W || ny < 0 || ny >= H) continue;
+      if (visited[ny * W + nx]) continue;
+      const ni = (ny * W + nx) * 4;
+      if (colorMatch(ni)) { visited[ny * W + nx] = 1; queue.push([nx, ny]); }
+    }
+  }
+
+  if (fillCount < 100) {
+    showPdfStatus('灰色區域太小，請重新點擊灰色填色範圍內部', 'status-err');
+    return;
+  }
+
+  // 提取輪廓：掃描每行找左右邊界
+  let minX = W, maxX = 0, minY = H, maxY = 0;
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      if (visited[y * W + x]) {
+        if (x < minX) minX = x; if (x > maxX) maxX = x;
+        if (y < minY) minY = y; if (y > maxY) maxY = y;
+      }
+    }
+  }
+
+  const leftPts = [], rightPts = [];
+  for (let y = minY; y <= maxY; y += 3) {
+    let lx = -1, rx = -1;
+    for (let x = minX; x <= maxX; x++) { if (visited[y * W + x]) { lx = x; break; } }
+    for (let x = maxX; x >= minX; x--) { if (visited[y * W + x]) { rx = x; break; } }
+    if (lx >= 0) leftPts.push([lx, y]);
+    if (rx >= 0 && rx !== lx) rightPts.push([rx, y]);
+  }
+  rightPts.reverse();
+  const outline = [...leftPts, ...rightPts];
+
+  // 畫紅框 overlay
+  const ovl = document.getElementById('pdfOverlay');
+  ovl.width = cvs.width; ovl.height = cvs.height;
+  const octx = ovl.getContext('2d');
+  octx.clearRect(0, 0, ovl.width, ovl.height);
+  if (outline.length > 2) {
+    octx.beginPath();
+    octx.moveTo(outline[0][0], outline[0][1]);
+    for (let i = 1; i < outline.length; i++) octx.lineTo(outline[i][0], outline[i][1]);
+    octx.closePath();
+    octx.fillStyle = 'rgba(220,30,30,0.2)'; octx.fill();
+    octx.strokeStyle = '#cc2200'; octx.lineWidth = 3; octx.stroke();
+  }
+
+  // 轉換成 PDF pt 座標
+  const scaleX = pdfVp.width / cvs.width;
+  const scaleY = pdfVp.height / cvs.height;
+  pdfGrayPoly = outline
+    .filter((_, i) => i % 4 === 0)
+    .map(p => [Math.round(p[0] * scaleX * 10) / 10, Math.round(p[1] * scaleY * 10) / 10]);
+
+  // 計算面積
+  const n = pdfGrayPoly.length;
+  let area = 0;
+  for (let i = 0; i < n; i++) {
+    const j = (i+1) % n;
+    area += pdfGrayPoly[i][0] * pdfGrayPoly[j][1] - pdfGrayPoly[j][0] * pdfGrayPoly[i][1];
+  }
+  area = Math.abs(area) / 2;
+  const areaM2 = area * PT_TO_REAL_MM * PT_TO_REAL_MM / 1e6;
+
+  const bwM = ((maxX - minX) * scaleX * PT_TO_REAL_MM / 1000).toFixed(1);
+  const bhM = ((maxY - minY) * scaleY * PT_TO_REAL_MM / 1000).toFixed(1);
+
+  showPdfStatus(`✅ 成功偵測地號範圍！面積約 <b>${areaM2.toFixed(0)} m²</b>（${bwM}m × ${bhM}m），開始鋪排...`, 'status-ok');
+
+  // 隱藏 PDF 預覽，直接鋪排
+  setTimeout(() => {
+    document.getElementById('pdfPreview').style.display = 'none';
+    generatePDF();
+  }, 600);
+}
+
+// ── 幾何工具 ──
+function polyArea(poly) {
+  let a = 0, n = poly.length;
+  for (let i = 0; i < n; i++) { const j = (i+1)%n; a += poly[i][0]*poly[j][1] - poly[j][0]*poly[i][1]; }
+  return Math.abs(a) / 2;
+}
+
+function pointInPoly(px, py, poly) {
+  let inside = false, n = poly.length;
+  for (let i = 0, j = n-1; i < n; j = i++) {
+    const xi=poly[i][0],yi=poly[i][1],xj=poly[j][0],yj=poly[j][1];
+    if (((yi>py)!==(yj>py)) && (px < (xj-xi)*(py-yi)/(yj-yi)+xi)) inside = !inside;
+  }
+  return inside;
+}
+
+function isInside(px, py, pW, pH, aw, al, mg) {
+  return px>=mg && py>=mg && (px+pW)<=(aw-mg) && (py+pH)<=(al-mg);
+}
+
+function distToSeg(px, py, x1, y1, x2, y2) {
+  const dx=x2-x1, dy=y2-y1, len2=dx*dx+dy*dy;
+  if (len2===0) return Math.hypot(px-x1, py-y1);
+  const t = Math.max(0, Math.min(1, ((px-x1)*dx+(py-y1)*dy)/len2));
+  return Math.hypot(px-(x1+t*dx), py-(y1+t*dy));
+}
+
+// ── 繪製太陽能板 ──
+function drawPanel(svg, rx, ry, rw, rh, isOver) {
+  const ns = 'http://www.w3.org/2000/svg';
+  const b = document.createElementNS(ns, 'rect');
+  b.setAttribute('x',rx); b.setAttribute('y',ry); b.setAttribute('width',rw); b.setAttribute('height',rh);
+  b.setAttribute('fill', isOver?'#1e3020':'#121e2a'); b.setAttribute('rx','1'); svg.appendChild(b);
+  for (let i=1;i<6;i++) {
+    const l=document.createElementNS(ns,'line'), ly=ry+(rh/6)*i;
+    l.setAttribute('x1',rx+1);l.setAttribute('x2',rx+rw-1);l.setAttribute('y1',ly);l.setAttribute('y2',ly);
+    l.setAttribute('stroke',isOver?'#3a5a3a':'#1e3545');l.setAttribute('stroke-width','0.4');svg.appendChild(l);
+  }
+  for (let i=1;i<4;i++) {
+    const l=document.createElementNS(ns,'line'), lx=rx+(rw/4)*i;
+    l.setAttribute('x1',lx);l.setAttribute('x2',lx);l.setAttribute('y1',ry+1);l.setAttribute('y2',ry+rh-1);
+    l.setAttribute('stroke',isOver?'#3a5a3a':'#1e3545');l.setAttribute('stroke-width','0.4');svg.appendChild(l);
+  }
+  const f=document.createElementNS(ns,'rect');
+  f.setAttribute('x',rx);f.setAttribute('y',ry);f.setAttribute('width',rw);f.setAttribute('height',rh);
+  f.setAttribute('fill','none');f.setAttribute('stroke',isOver?'#7aaa62':'#8aa8be');
+  f.setAttribute('stroke-width','1.2');f.setAttribute('rx','1');svg.appendChild(f);
+}
+
+function svgLine(svg,x1,y1,x2,y2,stroke,sw) {
+  const ns='http://www.w3.org/2000/svg',l=document.createElementNS(ns,'line');
+  l.setAttribute('x1',x1);l.setAttribute('y1',y1);l.setAttribute('x2',x2);l.setAttribute('y2',y2);
+  l.setAttribute('stroke',stroke);l.setAttribute('stroke-width',sw||'0.7');svg.appendChild(l);
+}
+
+function estimateTextW(txt,fs){return txt.length*fs*0.6;}
+
+function drawDimH(svg,x1,x2,y,label,color,slots) {
+  const fs=getFont(),cx=(x1+x2)/2,tw=estimateTextW(label,fs);
+  svgLine(svg,x1,y,x2,y,color);svgLine(svg,x1,y-4,x1,y+4,color);svgLine(svg,x2,y-4,x2,y+4,color);
+  let ty=y-(fs*0.6+2),rh2=fs+3,bumped=true,tries=0;
+  while(bumped&&tries<6){bumped=false;for(const s of slots){if(Math.abs(s.ty-ty)<rh2&&Math.abs(s.cx-cx)<(s.tw/2+tw/2+4)){ty-=rh2;bumped=true;break;}}tries++;}
+  slots.push({cx,ty,tw});
+  const ns='http://www.w3.org/2000/svg',t=document.createElementNS(ns,'text');
+  t.setAttribute('x',cx);t.setAttribute('y',ty);t.setAttribute('text-anchor','middle');
+  t.setAttribute('font-size',fs);t.setAttribute('fill',color);t.setAttribute('font-family','sans-serif');
+  t.textContent=label;svg.appendChild(t);
+}
+
+function drawDimV(svg,y1,y2,x,label,color,slots) {
+  const fs=getFont(),cy=(y1+y2)/2,tw=estimateTextW(label,fs);
+  svgLine(svg,x,y1,x,y2,color);svgLine(svg,x-4,y1,x+4,y1,color);svgLine(svg,x-4,y2,x+4,y2,color);
+  let tx=x-(fs*0.6+2),cw=fs+3,bumped=true,tries=0;
+  while(bumped&&tries<6){bumped=false;for(const s of slots){if(Math.abs(s.tx-tx)<cw&&Math.abs(s.cy-cy)<(s.tw/2+tw/2+4)){tx-=cw;bumped=true;break;}}tries++;}
+  slots.push({tx,cy,tw});
+  const ns='http://www.w3.org/2000/svg',t=document.createElementNS(ns,'text');
+  t.setAttribute('x',tx);t.setAttribute('y',cy);t.setAttribute('text-anchor','middle');
+  t.setAttribute('font-size',fs);t.setAttribute('fill',color);t.setAttribute('font-family','sans-serif');
+  t.setAttribute('transform',`rotate(-90,${tx},${cy})`);t.textContent=label;svg.appendChild(t);
+}
+
+// ── 主入口 ──
+function generate() {
+  if (currentMode === 'pdf') generatePDF();
+  else generateRect();
+}
+
+// ── 矩形模式 ──
+function generateRect() {
+  const plen=gf('plen')||2278, pwid=gf('pwid')||1134;
+  const gap=gf('gap')||20, aw=gf('awidth')||8000, al=gf('alength')||6000;
+  const mg=gf('margin'), watt=gf('watt')||580, invKw=gf('inv-kw')||6;
+  const allowOver=gb('allow-over'), invOver=gb('inv-over');
+  const pH=orient==='v'?plen:pwid, pW=orient==='v'?pwid:plen;
+  const OVER=allowOver?1000:0;
+
+  const cols=Math.floor((aw+OVER*2+gap)/(pW+gap));
+  const rows=Math.floor((al+OVER*2+gap)/(pH+gap));
+  const totalPW=cols*(pW+gap)-gap, totalPH=rows*(pH+gap)-gap;
+  const startX=(aw-totalPW)/2, startY=(al-totalPH)/2;
+
+  let panels=[], vCols=0, vRows=0;
+  for (let c=0;c<cols;c++) {
+    let has=false;
+    for (let r=0;r<rows;r++) {
+      const x=startX+c*(pW+gap), y=startY+r*(pH+gap);
+      if(x<-OVER||y<-OVER||x+pW>aw+OVER||y+pH>al+OVER) continue;
+      panels.push({x,y,inside:isInside(x,y,pW,pH,aw,al,mg),
+        overXLeft:Math.max(0,-x),overXRight:Math.max(0,x+pW-aw),
+        overYTop:Math.max(0,-y),overYBottom:Math.max(0,y+pH-al)});
+      has=true; if(c===0)vRows++;
+    }
+    if(has)vCols++;
+  }
+
+  lastPanels=panels; lastVals={pW,pH,aw,al,watt,invKw,gap,mg,mode:'rect'};
+  const count=panels.length, inside=panels.filter(p=>p.inside).length;
+  const totalKw=count*watt/1000;
+  const invCap=invOver?invKw*1.2:invKw;
+  const fic=(()=>{const n=Math.ceil(totalKw/invCap);return totalKw<=n*invCap+1e-9?n:n+1;})();
+  se('s-count',count);se('s-watt',totalKw.toFixed(2));
+  se('s-grid',vCols+'×'+vRows);se('s-inv',fic);se('s-area',count-inside);
+
+  let mL=0,mR=0,mT=0,mB=0;
+  if(allowOver) panels.forEach(p=>{if(!p.inside){
+    mL=Math.max(mL,p.overXLeft);mR=Math.max(mR,p.overXRight);
+    mT=Math.max(mT,p.overYTop);mB=Math.max(mB,p.overYBottom);}});
+
+  const ns='http://www.w3.org/2000/svg', fs=getFont();
+  const DIM_OFFSET=fs*1.8+8+25, extraPad=fs*3+8;
+  const topPad=DIM_OFFSET+extraPad+10, leftPad=DIM_OFFSET+extraPad+10, botPad=20, rightPad=16;
+  const isMobile=window.innerWidth<=700;
+  const area=document.getElementById('canvasArea');
+  const canW=Math.max(area.clientWidth-16, isMobile?320:400);
+  const dispOver=Math.max(OVER,200), viewW=aw+dispOver*2, viewH=al+dispOver*2;
+  const scale=(canW-leftPad-rightPad)/viewW;
+  const canH=viewH*scale+topPad+botPad+8;
+  const ox=leftPad+dispOver*scale, oy=topPad+dispOver*scale;
+
+  area.innerHTML='';
+  const svg=document.createElementNS(ns,'svg');
+  svg.setAttribute('width','100%');svg.setAttribute('height',canH);
+  svg.setAttribute('viewBox',`0 0 ${canW} ${canH}`);
+  svg.setAttribute('xmlns',ns);svg.style.display='block';
+  svg.style.minWidth=isMobile?'0':canW+'px';
+
+  if(allowOver){
+    const bg=document.createElementNS(ns,'rect');
+    bg.setAttribute('x',leftPad);bg.setAttribute('y',topPad);
+    bg.setAttribute('width',viewW*scale);bg.setAttribute('height',viewH*scale);
+    bg.setAttribute('fill','#e8f0e0');bg.setAttribute('stroke','#7aaa62');
+    bg.setAttribute('stroke-width','0.6');bg.setAttribute('stroke-dasharray','4,3');svg.appendChild(bg);
+  }
+  const bgM=document.createElementNS(ns,'rect');
+  bgM.setAttribute('x',ox);bgM.setAttribute('y',oy);
+  bgM.setAttribute('width',aw*scale);bgM.setAttribute('height',al*scale);
+  bgM.setAttribute('fill','#e8e6e0');svg.appendChild(bgM);
+
+  panels.forEach(p=>drawPanel(svg,ox+p.x*scale,oy+p.y*scale,pW*scale,pH*scale,!p.inside));
+
+  const rr=document.createElementNS(ns,'rect');
+  rr.setAttribute('x',ox);rr.setAttribute('y',oy);
+  rr.setAttribute('width',aw*scale);rr.setAttribute('height',al*scale);
+  rr.setAttribute('fill','none');rr.setAttribute('stroke','#cc2200');rr.setAttribute('stroke-width','2.5');svg.appendChild(rr);
+
+  const dimY=oy-DIM_OFFSET, dimX=ox-DIM_OFFSET, hSlots=[], vSlots=[];
+  if(mL>0) drawDimH(svg,ox-mL*scale,ox,dimY,`${(mL/1000).toFixed(2)}m`,'#cc2200',hSlots);
+  drawDimH(svg,ox,ox+aw*scale,dimY,`${(aw/1000).toFixed(2)}m`,'#cc2200',hSlots);
+  if(mR>0) drawDimH(svg,ox+aw*scale,ox+aw*scale+mR*scale,dimY,`${(mR/1000).toFixed(2)}m`,'#cc2200',hSlots);
+  if(mT>0) drawDimV(svg,oy-mT*scale,oy,dimX,`${(mT/1000).toFixed(2)}m`,'#cc2200',vSlots);
+  drawDimV(svg,oy,oy+al*scale,dimX,`${(al/1000).toFixed(2)}m`,'#cc2200',vSlots);
+  if(mB>0) drawDimV(svg,oy+al*scale,oy+al*scale+mB*scale,dimX,`${(mB/1000).toFixed(2)}m`,'#cc2200',vSlots);
+
+  area.appendChild(svg);
+  lastSVG=new XMLSerializer().serializeToString(svg);
+}
+
+// ── 非矩形 PDF 模式 ──
+function generatePDF() {
+  if (!pdfGrayPoly) { alert('請先上傳 PDF 並點擊灰色地號區域'); return; }
+
+  const plen=gf('plen')||2278, pwid=gf('pwid')||1134;
+  const gap_mm=gf('gapPdf')||20, watt=gf('watt')||580, invKw=gf('inv-kw')||6;
+  const invOver=gb('inv-over');
+  const pH_mm=orient==='v'?plen:pwid, pW_mm=orient==='v'?pwid:plen;
+  const pW=pW_mm/PT_TO_REAL_MM, pH=pH_mm/PT_TO_REAL_MM, gap=gap_mm/PT_TO_REAL_MM;
+
+  const poly=pdfGrayPoly;
+  const xs=poly.map(p=>p[0]), ys=poly.map(p=>p[1]);
+  const minX=Math.min(...xs), minY=Math.min(...ys);
+  const maxX=Math.max(...xs), maxY=Math.max(...ys);
+  const bw=maxX-minX, bh=maxY-minY;
+  const normPoly=poly.map(p=>[p[0]-minX, p[1]-minY]);
+  const areaM2=(polyArea(poly)*PT_TO_REAL_MM*PT_TO_REAL_MM/1e6).toFixed(0);
+
+  // 陣列設定
+  const ppa=Math.max(1, parseInt(document.getElementById('panels-per-row').value)||4);
+  const agap=gf('array-gap')/PT_TO_REAL_MM; // mm → PDF pt
+
+  // 計算第 idx 片的位置（含座間距）
+  function pdfPos(idx, size, panelGap){
+    const g=Math.floor(idx/ppa);
+    const p=idx%ppa;
+    return g*(ppa*(size+panelGap)-panelGap+agap)+p*(size+panelGap);
+  }
+  function pdfCount(totalSize, size, panelGap){
+    for(let n=1;n<=5000;n++) if(pdfPos(n,size,panelGap)+size>totalSize) return n-1;
+    return 0;
+  }
+
+  let getX, getY, cols, rows;
+  if(orient==='v'){
+    cols=Math.floor((bw+gap)/(pW+gap));
+    rows=pdfCount(bh, pH, gap);
+    getX=c=>c*(pW+gap);
+    getY=r=>pdfPos(r,pH,gap);
+  } else {
+    cols=pdfCount(bw, pW, gap);
+    rows=Math.floor((bh+gap)/(pH+gap));
+    getX=c=>pdfPos(c,pW,gap);
+    getY=r=>r*(pH+gap);
+  }
+
+  let panels=[];
+  for(let c=0;c<cols;c++){
+    for(let r=0;r<rows;r++){
+      const cx=getX(c), cy=getY(r);
+      const allIn = pointInPoly(cx,     cy,     normPoly) &&
+                    pointInPoly(cx+pW,  cy,     normPoly) &&
+                    pointInPoly(cx,     cy+pH,  normPoly) &&
+                    pointInPoly(cx+pW,  cy+pH,  normPoly);
+      if(allIn) panels.push({x:cx,y:cy,pW,pH,inside:true});
+    }
+  }
+
+  lastPanels=panels; lastVals={pW,pH,bw,bh,watt,invKw,gap,areaM2,mode:'pdf'};
+  const count=panels.length, totalKw=count*watt/1000;
+  const invCap=invOver?invKw*1.2:invKw;
+  const fic=(()=>{const n=Math.ceil(totalKw/invCap);return totalKw<=n*invCap+1e-9?n:n+1;})();
+  se('s-count',count);se('s-watt',totalKw.toFixed(2));
+  se('s-grid',areaM2);se('s-inv',fic);se('s-area',Math.ceil(orient==='v'?rows/ppa:cols/ppa));
+
+  const ns='http://www.w3.org/2000/svg', fs=getFont();
+  const pad=44, isMobile=window.innerWidth<=700;
+  const ra=document.getElementById('pdfResultArea');
+  ra.style.display='flex'; ra.innerHTML='';
+  const canW=Math.max(ra.clientWidth-16, isMobile?300:360);
+  const scale=Math.min((canW-pad*2)/bw,(canW-pad*2)*0.9/bh);
+  const canH=bh*scale+pad*2+20;
+  const ox=pad, oy=pad;
+
+  const svg=document.createElementNS(ns,'svg');
+  svg.setAttribute('width','100%');svg.setAttribute('height',canH);
+  svg.setAttribute('viewBox',`0 0 ${canW} ${canH}`);
+  svg.setAttribute('xmlns',ns);svg.style.display='block';
+
+  // 地號底色
+  const polyPts=normPoly.map(p=>`${(ox+p[0]*scale).toFixed(1)},${(oy+p[1]*scale).toFixed(1)}`).join(' ');
+  const bgPoly=document.createElementNS(ns,'polygon');
+  bgPoly.setAttribute('points',polyPts);bgPoly.setAttribute('fill','#e8e6e0');
+  bgPoly.setAttribute('stroke','none');svg.appendChild(bgPoly);
+
+  // 板子（先畫）
+  panels.forEach(p=>drawPanel(svg,ox+p.x*scale,oy+p.y*scale,p.pW*scale,p.pH*scale,false));
+
+  // 座間距分隔線（橘色虛線）
+  if(agap>0){
+    if(orient==='v'){
+      for(let i=ppa;i<rows;i+=ppa){
+        const prevEnd=getY(i-1)+pH;
+        const nextStart=getY(i);
+        const midY=oy+(prevEnd+(nextStart-prevEnd)/2)*scale;
+        const l=document.createElementNS(ns,'line');
+        l.setAttribute('x1',ox);l.setAttribute('x2',ox+bw*scale);
+        l.setAttribute('y1',midY);l.setAttribute('y2',midY);
+        l.setAttribute('stroke','#f4a522');l.setAttribute('stroke-width','2');
+        l.setAttribute('stroke-dasharray','10,6');svg.appendChild(l);
+      }
+    } else {
+      for(let i=ppa;i<cols;i+=ppa){
+        const prevEnd=getX(i-1)+pW;
+        const nextStart=getX(i);
+        const midX=ox+(prevEnd+(nextStart-prevEnd)/2)*scale;
+        const l=document.createElementNS(ns,'line');
+        l.setAttribute('x1',midX);l.setAttribute('x2',midX);
+        l.setAttribute('y1',oy);l.setAttribute('y2',oy+bh*scale);
+        l.setAttribute('stroke','#f4a522');l.setAttribute('stroke-width','2');
+        l.setAttribute('stroke-dasharray','10,6');svg.appendChild(l);
+      }
+    }
+  }
+
+  // 輪廓紅框（畫在板子上方）
+  const outlinePoly=document.createElementNS(ns,'polygon');
+  outlinePoly.setAttribute('points',polyPts);outlinePoly.setAttribute('fill','none');
+  outlinePoly.setAttribute('stroke','#cc2200');outlinePoly.setAttribute('stroke-width','2.5');svg.appendChild(outlinePoly);
+
+  // 尺寸標註（外側）
+  const bwM=(bw*PT_TO_REAL_MM/1000).toFixed(1), bhM=(bh*PT_TO_REAL_MM/1000).toFixed(1);
+  const DIM=22;
+  svgLine(svg,ox,oy-DIM,ox+bw*scale,oy-DIM,'#888');
+  svgLine(svg,ox,oy-DIM-4,ox,oy-DIM+4,'#888');
+  svgLine(svg,ox+bw*scale,oy-DIM-4,ox+bw*scale,oy-DIM+4,'#888');
+  const t1=document.createElementNS(ns,'text');
+  t1.setAttribute('x',ox+bw*scale/2);t1.setAttribute('y',oy-DIM-5);
+  t1.setAttribute('text-anchor','middle');t1.setAttribute('font-size',fs);
+  t1.setAttribute('fill','#555');t1.setAttribute('font-family','sans-serif');
+  t1.textContent=`${bwM}m`;svg.appendChild(t1);
+  svgLine(svg,ox-DIM,oy,ox-DIM,oy+bh*scale,'#888');
+  svgLine(svg,ox-DIM-4,oy,ox-DIM+4,oy,'#888');
+  svgLine(svg,ox-DIM-4,oy+bh*scale,ox-DIM+4,oy+bh*scale,'#888');
+  const t2=document.createElementNS(ns,'text');
+  t2.setAttribute('x',ox-DIM-5);t2.setAttribute('y',oy+bh*scale/2);
+  t2.setAttribute('text-anchor','middle');t2.setAttribute('font-size',fs);
+  t2.setAttribute('fill','#555');t2.setAttribute('font-family','sans-serif');
+  t2.setAttribute('transform',`rotate(-90,${ox-DIM-5},${oy+bh*scale/2})`);
+  t2.textContent=`${bhM}m`;svg.appendChild(t2);
+
+  ra.appendChild(svg);
+  lastSVG=new XMLSerializer().serializeToString(svg);
+}
+
+// ── 下載 ──
+function downloadPNG() {
+  if (!lastSVG) { alert('請先生成配置圖'); return; }
+  const sel=lastVals.mode==='pdf'?'#pdfResultArea svg':'#canvasArea svg';
+  const svgEl=document.querySelector(sel); if(!svgEl){alert('找不到圖面');return;}
+  const vb=svgEl.getAttribute('viewBox').split(' ');
+  const w=parseInt(vb[2]),h=parseInt(vb[3]);
+  const canvas=document.createElement('canvas');
+  canvas.width=w*2;canvas.height=h*2;
+  const ctx=canvas.getContext('2d');
+  ctx.fillStyle='#fff';ctx.fillRect(0,0,w*2,h*2);
+  const img=new Image();
+  const url=URL.createObjectURL(new Blob([lastSVG],{type:'image/svg+xml;charset=utf-8'}));
+  img.onload=()=>{ctx.scale(2,2);ctx.drawImage(img,0,0);
+    const a=document.createElement('a');a.href=canvas.toDataURL('image/png');
+    a.download='solar_layout.png';a.click();URL.revokeObjectURL(url);};
+  img.src=url;
+}
+
+function downloadDXF() {
+  if (!lastPanels.length) { alert('請先生成配置圖'); return; }
+  const {pW,pH,aw,al,mode}=lastVals;
+  const isPdf=mode==='pdf';
+  const toMM=isPdf?PT_TO_REAL_MM:1;
+  let dxf='0\nSECTION\n2\nHEADER\n9\n$INSUNITS\n70\n4\n0\nENDSEC\n0\nSECTION\n2\nENTITIES\n';
+  const rDXF=(x,y,w,h,layer)=>{
+    const pts=[[x,y],[x+w,y],[x+w,y+h],[x,y+h],[x,y]];let s='';
+    for(let i=0;i<4;i++) s+=`0\nLINE\n8\n${layer}\n10\n${(pts[i][0]*toMM).toFixed(2)}\n20\n${(pts[i][1]*toMM).toFixed(2)}\n30\n0.00\n11\n${(pts[i+1][0]*toMM).toFixed(2)}\n21\n${(pts[i+1][1]*toMM).toFixed(2)}\n31\n0.00\n`;
+    return s;
+  };
+  if(!isPdf) dxf+=rDXF(0,0,aw,al,'BOUNDARY');
+  lastPanels.forEach(p=>{dxf+=rDXF(p.x,p.y,p.pW||pW,p.pH||pH,p.inside?'SOLAR_PANEL':'SOLAR_PANEL_OVER');});
+  dxf+='0\nENDSEC\n0\nEOF\n';
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([dxf],{type:'text/plain'}));
+  a.download='solar_layout.dxf';a.click();
+}
+</script>
+</body>
+</html>
