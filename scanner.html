@@ -194,6 +194,23 @@ button:disabled{opacity:.35;cursor:not-allowed;transform:none!important}
 .p-ai.show{display:block}
 .p-ai-label{font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px}
 
+/* 上傳框 */
+.upload-box{
+  flex-shrink:0;border:1.5px dashed var(--border2);border-radius:10px;
+  padding:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:4px;cursor:pointer;transition:all .2s;color:var(--text2);font-size:12px;
+}
+.upload-box:hover{border-color:var(--accent);color:var(--accent);background:rgba(233,255,82,.04)}
+
+/* 照片項目 */
+.pg-item-wrap{display:flex;flex-direction:column;gap:3px}
+.pg-dl-btn{
+  width:100%;padding:3px 0;border-radius:5px;border:1px solid var(--border2);
+  background:var(--bg3);color:var(--text2);font-size:9px;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;gap:3px;
+}
+.pg-dl-btn:hover{background:var(--accent);color:#0d0d0d;border-color:transparent}
+
 /* Toast */
 .toast{position:fixed;bottom:2rem;left:50%;transform:translateX(-50%) translateY(20px);background:var(--bg3);color:var(--text);font-size:13px;font-weight:500;padding:10px 20px;border-radius:24px;border:1px solid var(--border2);opacity:0;transition:all .3s;white-space:nowrap;z-index:999;pointer-events:none}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
@@ -256,6 +273,14 @@ button:disabled{opacity:.35;cursor:not-allowed;transform:none!important}
     <div class="photo-grid" id="photo-grid">
       <div class="empty-note" id="empty-note">尚未收到照片</div>
     </div>
+
+    <!-- 上傳照片辨識 -->
+    <div class="upload-box" id="upload-box" onclick="document.getElementById('d-upload').click()" ondragover="event.preventDefault()" ondrop="handleDrop(event)">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+      <span>上傳照片辨識</span>
+      <span style="font-size:10px;color:var(--text3)">點擊或拖曳圖片</span>
+    </div>
+    <input type="file" id="d-upload" accept="image/*" style="display:none" onchange="handleDesktopUpload(event)">
   </div>
 
   <!-- 右下：AI 辨識結果 -->
@@ -447,13 +472,49 @@ function addThumb(b64,idx){
 }
 
 function addGrid(b64,idx){
-  const w=document.createElement('div');w.className='pg-item';
-  const i=document.createElement('img');i.src=b64;
-  const dl=document.createElement('button');dl.className='dl';dl.textContent='↓';
-  dl.onclick=e=>{e.stopPropagation();dlPhoto(b64,idx)};
-  w.appendChild(i);w.appendChild(dl);
-  w.onclick=()=>{$('live-img').src=b64;lastB64=b64;runAI()};
-  $('photo-grid').insertBefore(w,$('photo-grid').firstChild);
+  const wrap=document.createElement('div');wrap.className='pg-item-wrap';
+  const item=document.createElement('div');item.className='pg-item';
+  const img=document.createElement('img');img.src=b64;img.alt='';
+  item.appendChild(img);
+  item.onclick=()=>{$('live-img').src=b64;$('live-img').style.display='block';lastB64=b64;runAI()};
+  const dlBtn=document.createElement('button');dlBtn.className='pg-dl-btn';
+  dlBtn.innerHTML='↓ 下載';
+  dlBtn.onclick=()=>dlPhoto(b64,idx);
+  wrap.appendChild(item);wrap.appendChild(dlBtn);
+  $('photo-grid').insertBefore(wrap,$('photo-grid').firstChild);
+}
+
+function handleDesktopUpload(e){
+  const f=e.target.files[0];if(!f)return;
+  loadImage(f);e.target.value='';
+}
+
+function handleDrop(e){
+  e.preventDefault();
+  $('upload-box').style.borderColor='';
+  const f=e.dataTransfer.files[0];
+  if(!f||!f.type.startsWith('image/'))return;
+  loadImage(f);
+}
+
+function loadImage(f){
+  const r=new FileReader();
+  r.onload=ev=>{
+    const b64=ev.target.result;
+    lastB64=b64;photos.unshift(b64);
+    $('live-img').src=b64;$('live-img').style.display='block';
+    $('no-img-txt').style.display='none';
+    $('snap-badge').classList.add('on');
+    setTimeout(()=>$('snap-badge').classList.remove('on'),2000);
+    $('photo-cnt').textContent=photos.length+' 張';
+    $('empty-note').style.display='none';
+    addThumb(b64,photos.length);
+    addGrid(b64,photos.length);
+    $('btn-rerun').disabled=false;
+    toast('圖片已載入，辨識中...');
+    runAI();
+  };
+  r.readAsDataURL(f);
 }
 
 function dlPhoto(b64,idx){
