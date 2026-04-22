@@ -318,10 +318,7 @@ button:disabled{opacity:.35;cursor:not-allowed;transform:none!important}
       <div class="panel-label" style="margin-bottom:0">AI 辨識結果</div>
       <button class="btn-ai-rerun" id="btn-rerun" onclick="runAI()" disabled>重新辨識</button>
     </div>
-    <div class="apikey-box">
-      <span class="apikey-label">API Key</span>
-      <input class="apikey-input" id="api-key-input" type="password" placeholder="貼上你的 Anthropic API Key（sk-ant-...）">
-    </div>
+
     <div id="ai-content"><div class="ai-placeholder">收到照片後自動辨識</div></div>
     <div class="ai-actions" id="ai-actions" style="display:none">
       <button class="btn-action" onclick="copyAI()">
@@ -365,7 +362,7 @@ button:disabled{opacity:.35;cursor:not-allowed;transform:none!important}
       <div class="p-ph-icon">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
       </div>
-      <p>點擊「開啟相機」開始</p>
+      <p id="p-placeholder-text">開啟相機中...</p>
     </div>
     <video id="p-video" autoplay playsinline muted></video>
     <canvas id="p-canvas"></canvas>
@@ -380,13 +377,9 @@ button:disabled{opacity:.35;cursor:not-allowed;transform:none!important}
   </div>
 
   <div class="p-btns">
-    <button class="p-btn primary full" id="p-btn-cam" onclick="startPhoneCamera()">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
-      開啟相機
-    </button>
-    <button class="p-btn" id="p-btn-manual" onclick="manualCapture()" disabled>
+    <button class="p-btn primary" id="p-btn-manual" onclick="manualCapture()" disabled>
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg>
-      手動拍照
+      拍照
     </button>
     <button class="p-btn" onclick="document.getElementById('p-file').click()">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
@@ -398,8 +391,14 @@ button:disabled{opacity:.35;cursor:not-allowed;transform:none!important}
   <div class="p-status-wrap">
     <div class="p-status waiting" id="p-status">
       <div class="s-dot"></div>
-      <span id="p-status-text">等待連線至電腦...</span>
+      <span id="p-status-text">相機啟動中...</span>
     </div>
+  </div>
+
+  <!-- 手機端 AI 辨識結果 -->
+  <div id="p-ai-wrap" style="margin:.75rem 1rem 1rem;display:none">
+    <div style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">辨識結果</div>
+    <div id="p-ai-content" style="background:var(--bg2);border:1px solid var(--border);border-radius:14px;padding:1rem"></div>
   </div>
 </div>
 
@@ -469,7 +468,8 @@ function onDesktopConnected(){
   conn.on('data',d=>{
     if(d.type==='photo') receivePhoto(d.image);
     else if(d.type==='stream') receiveStream(d.image);
-    else if(d.type==='ready'){showToast('手機相機已開啟，可以拍照')}
+    else if(d.type==='ai-result'){lastResult=d.result;renderAI(d.result);}
+    else if(d.type==='ready') showToast('手機相機已開啟，可以拍照');
     else if(d.type==='hello') showToast('手機已加入');
   });
   conn.on('close',()=>{
@@ -567,11 +567,6 @@ function generateQR(){
 /* ══ AI 辨識 ══ */
 async function runAI(){
   if(!lastB64)return;
-  const apiKey=($('api-key-input').value||'').trim();
-  if(!apiKey){
-    $('ai-content').innerHTML='<div class="ai-placeholder" style="color:var(--amber)">請先輸入 Anthropic API Key</div>';
-    return;
-  }
   $('ai-content').innerHTML='<div class="ai-loading"><span class="spinner"></span>辨識中...</div>';
   $('ai-actions').style.display='none';
   $('btn-rerun').disabled=true;
@@ -581,18 +576,22 @@ async function runAI(){
       method:'POST',
       headers:{
         'Content-Type':'application/json',
-        'x-api-key':apiKey,
         'anthropic-version':'2023-06-01',
         'anthropic-dangerous-direct-browser-ipc':'true'
       },
-      body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:800,messages:[{role:'user',content:[
-        {type:'image',source:{type:'base64',media_type:'image/jpeg',data:imgData}},
-        {type:'text',text:'請辨識這張發票圖片，只回傳 JSON 不含 markdown：{"invoice_number":"發票號碼","date":"日期YYYY/MM/DD","total":"含稅總金額數字","seller":"賣方名稱","seller_tax_id":"賣方統編","buyer":"買方名稱或無","buyer_tax_id":"買方統編或無","items":"品項摘要20字內"}'}
-      ]}]})
+      body:JSON.stringify({
+        model:'claude-sonnet-4-20250514',
+        max_tokens:800,
+        messages:[{role:'user',content:[
+          {type:'image',source:{type:'base64',media_type:'image/jpeg',data:imgData}},
+          {type:'text',text:'請辨識這張發票圖片，只回傳 JSON 不含 markdown，欄位如下：{"invoice_number":"發票號碼","date":"日期YYYY/MM/DD","total":"含稅總金額只填數字","seller":"賣方名稱","seller_tax_id":"賣方統編","buyer":"買方名稱沒有填無","buyer_tax_id":"買方統編沒有填無","random_code":"隨機碼","items":"品項摘要20字內"}'}
+        ]}]
+      })
     });
     const data=await res.json();
-    if(!res.ok)throw new Error(data.error?.message||'失敗');
-    lastResult=JSON.parse(data.content.map(i=>i.text||'').join('').replace(/```json|```/g,'').trim());
+    if(!res.ok)throw new Error(data.error?.message||'API 呼叫失敗');
+    const text=data.content.map(i=>i.text||'').join('');
+    lastResult=JSON.parse(text.replace(/```json|```/g,'').trim());
     renderAI(lastResult);
   }catch(e){
     $('ai-content').innerHTML=`<div class="ai-placeholder" style="color:var(--red)">辨識失敗：${e.message}</div>`;
@@ -606,7 +605,8 @@ function renderAI(r){
     <div class="ai-fields">
       <div class="ai-field full"><div class="af-label">發票號碼</div><div class="af-val">${r.invoice_number||'—'}</div></div>
       <div class="ai-field"><div class="af-label">日期</div><div class="af-val">${r.date||'—'}</div></div>
-      <div class="ai-field"><div class="af-label">含稅總金額</div><div class="af-val total">${m(r.total)}</div></div>
+      <div class="ai-field"><div class="af-label">隨機碼</div><div class="af-val">${r.random_code||'—'}</div></div>
+      <div class="ai-field full"><div class="af-label">含稅總金額</div><div class="af-val total">${m(r.total)}</div></div>
       <div class="ai-field"><div class="af-label">賣方名稱</div><div class="af-val">${r.seller||'—'}</div></div>
       <div class="ai-field"><div class="af-label">賣方統編</div><div class="af-val">${r.seller_tax_id||'—'}</div></div>
       <div class="ai-field"><div class="af-label">買方名稱</div><div class="af-val">${r.buyer||'—'}</div></div>
@@ -638,6 +638,9 @@ function exportCSV(){
 function startPhone(code){
   myRole='phone';
   show('phone-screen');
+  // 自動開啟相機
+  startPhoneCamera();
+  // 同時嘗試連線電腦
   loadPeer(()=>{
     peer=new Peer('inv-p-'+Date.now(),PCFG);
     peer.on('open',()=>{
@@ -675,9 +678,7 @@ function connectToDesktop(){
 function setupPhoneConn(){
   setPSt('connected','已連線至電腦！');
   conn.on('data',d=>{if(d.type==='capture')phoneTakePhoto()});
-  conn.on('close',()=>{setPSt('waiting','連線中斷');conn=null;if(streamInterval){clearInterval(streamInterval);streamInterval=null}});
-  // 若相機已開啟，立即開始串流
-  if(phoneStream) startStreamToDesktop();
+  conn.on('close',()=>{setPSt('waiting','連線中斷');conn=null});
 }
 
 function setPSt(type,msg){
@@ -691,28 +692,111 @@ async function startPhoneCamera(){
     const v=$('p-video');v.srcObject=phoneStream;v.style.display='block';
     $('p-placeholder').style.display='none';
     $('scan-overlay').classList.add('on');
-    $('p-btn-cam').disabled=true;
     $('p-btn-manual').disabled=false;
-    if(conn&&conn.open){
-      conn.send({type:'ready'});
-      startStreamToDesktop();
-    }
-  }catch(e){showToast('無法開啟相機：'+e.message)}
+    setPSt('connected','相機已開啟，對準發票後按拍照');
+    if(conn&&conn.open)conn.send({type:'ready'});
+  }catch(e){
+    $('p-placeholder-text').textContent='無法開啟相機，請點此重試';
+    $('p-placeholder').onclick=startPhoneCamera;
+    $('p-placeholder').style.cursor='pointer';
+    setPSt('error','相機開啟失敗：'+e.message);
+  }
 }
 
-let streamInterval=null;
-function startStreamToDesktop(){
-  if(streamInterval)clearInterval(streamInterval);
-  streamInterval=setInterval(()=>{
-    if(!conn||!conn.open||!phoneStream){clearInterval(streamInterval);return}
-    const v=$('p-video');
-    if(!v.srcObject||v.videoWidth===0)return;
-    const c=document.createElement('canvas');
-    c.width=Math.round(v.videoWidth/2);
-    c.height=Math.round(v.videoHeight/2);
-    c.getContext('2d').drawImage(v,0,0,c.width,c.height);
-    conn.send({type:'stream',image:c.toDataURL('image/jpeg',0.4)});
-  },200);
+function phoneTakePhoto(){
+  const v=$('p-video');
+  if(!v.srcObject){showToast('請先開啟相機');return}
+  const c=$('p-canvas');
+  c.width=v.videoWidth||1280;c.height=v.videoHeight||960;
+  c.getContext('2d').drawImage(v,0,0);
+  const b64=c.toDataURL('image/jpeg',0.88);
+  const fl=$('remote-flash');fl.classList.add('flash');setTimeout(()=>fl.classList.remove('flash'),400);
+  showToast('拍照完成，辨識中...');
+  // 傳給電腦
+  if(conn&&conn.open)conn.send({type:'photo',image:b64});
+  // 手機直接辨識
+  runPhoneAI(b64);
+}
+
+async function runPhoneAI(b64){
+  const wrap=$('p-ai-wrap');
+  const content=$('p-ai-content');
+  wrap.style.display='block';
+  content.innerHTML='<div style="text-align:center;padding:1rem;color:var(--text2);font-size:13px"><span class="spinner"></span>AI 辨識中...</div>';
+  try{
+    const imgData=b64.replace(/^data:image\/\w+;base64,/,'');
+    const res=await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',
+      headers:{
+        'Content-Type':'application/json',
+        'anthropic-version':'2023-06-01',
+        'anthropic-dangerous-direct-browser-ipc':'true'
+      },
+      body:JSON.stringify({
+        model:'claude-sonnet-4-20250514',
+        max_tokens:800,
+        messages:[{role:'user',content:[
+          {type:'image',source:{type:'base64',media_type:'image/jpeg',data:imgData}},
+          {type:'text',text:'請辨識這張發票圖片，只回傳 JSON 不含 markdown：{"invoice_number":"發票號碼","date":"日期YYYY/MM/DD","total":"含稅總金額只填數字","seller":"賣方名稱","seller_tax_id":"賣方統編","buyer":"買方名稱沒有填無","buyer_tax_id":"買方統編沒有填無","random_code":"隨機碼","items":"品項摘要20字內"}'}
+        ]}]
+      })
+    });
+    const data=await res.json();
+    if(!res.ok)throw new Error(data.error?.message||'失敗');
+    const r=JSON.parse(data.content.map(i=>i.text||'').join('').replace(/```json|```/g,'').trim());
+    const m=v=>v&&v!=='無'&&v!=='—'?'NT$ '+Number(v).toLocaleString():'—';
+    content.innerHTML=`
+      <div style="display:flex;flex-direction:column;gap:6px">
+        <div style="background:var(--bg3);border-radius:9px;padding:9px 12px">
+          <div style="font-size:9px;color:var(--text3);font-family:'JetBrains Mono',monospace;text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px">發票號碼</div>
+          <div style="font-size:15px;font-weight:700;color:var(--accent)">${r.invoice_number||'—'}</div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+          <div style="background:var(--bg3);border-radius:9px;padding:9px 12px">
+            <div style="font-size:9px;color:var(--text3);font-family:'JetBrains Mono',monospace;text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px">日期</div>
+            <div style="font-size:13px;font-weight:500;color:var(--text)">${r.date||'—'}</div>
+          </div>
+          <div style="background:var(--bg3);border-radius:9px;padding:9px 12px">
+            <div style="font-size:9px;color:var(--text3);font-family:'JetBrains Mono',monospace;text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px">隨機碼</div>
+            <div style="font-size:13px;font-weight:500;color:var(--text)">${r.random_code||'—'}</div>
+          </div>
+        </div>
+        <div style="background:var(--bg3);border-radius:9px;padding:9px 12px">
+          <div style="font-size:9px;color:var(--text3);font-family:'JetBrains Mono',monospace;text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px">含稅總金額</div>
+          <div style="font-size:22px;font-weight:700;color:var(--accent);font-family:'JetBrains Mono',monospace">${m(r.total)}</div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+          <div style="background:var(--bg3);border-radius:9px;padding:9px 12px">
+            <div style="font-size:9px;color:var(--text3);font-family:'JetBrains Mono',monospace;text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px">賣方</div>
+            <div style="font-size:12px;font-weight:500;color:var(--text)">${r.seller||'—'}</div>
+          </div>
+          <div style="background:var(--bg3);border-radius:9px;padding:9px 12px">
+            <div style="font-size:9px;color:var(--text3);font-family:'JetBrains Mono',monospace;text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px">賣方統編</div>
+            <div style="font-size:12px;font-weight:500;color:var(--text)">${r.seller_tax_id||'—'}</div>
+          </div>
+        </div>
+        ${r.buyer&&r.buyer!=='無'?`
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+          <div style="background:var(--bg3);border-radius:9px;padding:9px 12px">
+            <div style="font-size:9px;color:var(--text3);font-family:'JetBrains Mono',monospace;text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px">買方</div>
+            <div style="font-size:12px;font-weight:500;color:var(--text)">${r.buyer}</div>
+          </div>
+          <div style="background:var(--bg3);border-radius:9px;padding:9px 12px">
+            <div style="font-size:9px;color:var(--text3);font-family:'JetBrains Mono',monospace;text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px">買方統編</div>
+            <div style="font-size:12px;font-weight:500;color:var(--text)">${r.buyer_tax_id||'—'}</div>
+          </div>
+        </div>`:''}
+        <div style="background:var(--bg3);border-radius:9px;padding:9px 12px">
+          <div style="font-size:9px;color:var(--text3);font-family:'JetBrains Mono',monospace;text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px">品項</div>
+          <div style="font-size:12px;color:var(--text2)">${r.items||'—'}</div>
+        </div>
+      </div>`;
+    showToast('辨識完成！');
+    // 同步傳給電腦顯示
+    if(conn&&conn.open)conn.send({type:'ai-result',result:r});
+  }catch(e){
+    content.innerHTML=`<div style="text-align:center;padding:1rem;color:var(--red);font-size:13px">辨識失敗：${e.message}</div>`;
+  }
 }
 
 function phoneTakePhoto(){
@@ -731,8 +815,9 @@ function handleUpload(e){
   const f=e.target.files[0];if(!f)return;
   const r=new FileReader();
   r.onload=ev=>{
-    if(conn&&conn.open){conn.send({type:'photo',image:ev.target.result});showToast('圖片已傳送')}
-    else showToast('尚未連線至電腦');
+    const b64=ev.target.result;
+    if(conn&&conn.open)conn.send({type:'photo',image:b64});
+    runPhoneAI(b64);
   };
   r.readAsDataURL(f);e.target.value='';
 }
