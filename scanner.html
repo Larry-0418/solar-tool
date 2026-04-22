@@ -79,14 +79,19 @@ button:disabled{opacity:.35;cursor:not-allowed;transform:none!important}
 }
 .panel-label{font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}
 
-/* 最新照片大圖 */
+/* 最新照片大圖 / 即時串流 */
 .latest-photo{
   flex:1;background:#000;border-radius:14px;overflow:hidden;
   border:1px solid var(--border);position:relative;
   display:flex;align-items:center;justify-content:center;min-height:0;
 }
 .latest-photo img{width:100%;height:100%;object-fit:contain;display:none}
+.latest-photo video{width:100%;height:100%;object-fit:contain;display:none}
 .latest-photo .no-photo{font-size:13px;color:var(--text3);text-align:center}
+.live-badge{position:absolute;top:10px;left:10px;background:rgba(255,82,82,.85);color:#fff;font-size:10px;font-weight:700;padding:3px 9px;border-radius:20px;letter-spacing:.5px;display:none}
+.live-badge.on{display:block}
+.snap-badge{position:absolute;top:10px;left:10px;background:rgba(233,255,82,.85);color:#0d0d0d;font-size:10px;font-weight:700;padding:3px 9px;border-radius:20px;letter-spacing:.5px;display:none}
+.snap-badge.on{display:block}
 
 /* 縮圖列 */
 .thumb-strip{
@@ -106,8 +111,8 @@ button:disabled{opacity:.35;cursor:not-allowed;transform:none!important}
 /* 右上：已收到照片區域 */
 .right-top{
   border-bottom:1px solid var(--border);
-  padding:1.25rem;display:flex;flex-direction:column;gap:.75rem;
-  overflow:hidden;
+  padding:1rem 1.25rem;display:flex;flex-direction:column;gap:.5rem;
+  overflow:hidden;max-height:220px;
 }
 .conn-bar{
   display:flex;align-items:center;gap:8px;padding:8px 12px;
@@ -277,8 +282,11 @@ button:disabled{opacity:.35;cursor:not-allowed;transform:none!important}
       <div class="panel-label">QR Code 與拍照結果</div>
     </div>
     <div class="latest-photo" id="latest-photo">
-      <span class="no-photo">等待第一張照片...</span>
+      <span class="no-photo" id="no-photo-text">等待手機串流...</span>
+      <video id="live-video" autoplay playsinline muted></video>
       <img id="latest-img" alt="最新發票">
+      <div class="live-badge" id="live-badge">● LIVE</div>
+      <div class="snap-badge" id="snap-badge">📷 最新照片</div>
     </div>
     <div class="thumb-strip" id="thumb-strip"></div>
   </div>
@@ -448,7 +456,8 @@ function onDesktopConnected(){
 
   conn.on('data',d=>{
     if(d.type==='photo') receivePhoto(d.image);
-    else if(d.type==='ready') showToast('手機相機已開啟，可以拍照');
+    else if(d.type==='stream') receiveStream(d.image);
+    else if(d.type==='ready'){showToast('手機相機已開啟，可以拍照')}
     else if(d.type==='hello') showToast('手機已加入');
   });
   conn.on('close',()=>{
@@ -466,7 +475,22 @@ function sendCapture(){
   b.classList.add('flash');setTimeout(()=>b.classList.remove('flash'),350);
 }
 
+function receiveStream(b64){
+  const lv=$('live-video');
+  const li=$('latest-img');
+  // 用 img 顯示串流幀
+  li.src=b64;
+  li.style.display='block';
+  if($('no-photo-text'))$('no-photo-text').style.display='none';
+  $('live-badge').classList.add('on');
+  $('snap-badge').classList.remove('on');
+}
+
 function receivePhoto(b64){
+  // 切換到快照模式
+  $('live-badge').classList.remove('on');
+  $('snap-badge').classList.add('on');
+  setTimeout(()=>$('snap-badge').classList.remove('on'),2000);
   lastB64=b64;photos.unshift(b64);
   $('photo-count-label').textContent=photos.length+' 張';
   $('empty-grid').style.display='none';
@@ -537,7 +561,12 @@ async function runAI(){
   try{
     const imgData=lastB64.replace(/^data:image\/\w+;base64,/,'');
     const res=await fetch('https://api.anthropic.com/v1/messages',{
-      method:'POST',headers:{'Content-Type':'application/json'},
+      method:'POST',
+      headers:{
+        'Content-Type':'application/json',
+        'anthropic-dangerous-direct-browser-ipc':'true',
+        'anthropic-version':'2023-06-01'
+      },
       body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:800,messages:[{role:'user',content:[
         {type:'image',source:{type:'base64',media_type:'image/jpeg',data:imgData}},
         {type:'text',text:'請辨識這張發票圖片，只回傳 JSON 不含 markdown：{"invoice_number":"發票號碼","date":"日期YYYY/MM/DD","total":"含稅總金額數字","seller":"賣方名稱","seller_tax_id":"賣方統編","buyer":"買方名稱或無","buyer_tax_id":"買方統編或無","items":"品項摘要20字內"}'}
@@ -628,7 +657,9 @@ function connectToDesktop(){
 function setupPhoneConn(){
   setPSt('connected','已連線至電腦！');
   conn.on('data',d=>{if(d.type==='capture')phoneTakePhoto()});
-  conn.on('close',()=>{setPSt('waiting','連線中斷');conn=null});
+  conn.on('close',()=>{setPSt('waiting','連線中斷');conn=null;if(streamInterval){clearInterval(streamInterval);streamInterval=null}});
+  // 若相機已開啟，立即開始串流
+  if(phoneStream) startStreamToDesktop();
 }
 
 function setPSt(type,msg){
@@ -644,8 +675,26 @@ async function startPhoneCamera(){
     $('scan-overlay').classList.add('on');
     $('p-btn-cam').disabled=true;
     $('p-btn-manual').disabled=false;
-    if(conn&&conn.open)conn.send({type:'ready'});
+    if(conn&&conn.open){
+      conn.send({type:'ready'});
+      startStreamToDesktop();
+    }
   }catch(e){showToast('無法開啟相機：'+e.message)}
+}
+
+let streamInterval=null;
+function startStreamToDesktop(){
+  if(streamInterval)clearInterval(streamInterval);
+  streamInterval=setInterval(()=>{
+    if(!conn||!conn.open||!phoneStream){clearInterval(streamInterval);return}
+    const v=$('p-video');
+    if(!v.srcObject||v.videoWidth===0)return;
+    const c=document.createElement('canvas');
+    c.width=Math.round(v.videoWidth/2);
+    c.height=Math.round(v.videoHeight/2);
+    c.getContext('2d').drawImage(v,0,0,c.width,c.height);
+    conn.send({type:'stream',image:c.toDataURL('image/jpeg',0.4)});
+  },200);
 }
 
 function phoneTakePhoto(){
